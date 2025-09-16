@@ -115,10 +115,6 @@ class WebcamManager {
         this.ctx.fillStyle = '#4A90E2';
         this.ctx.font = 'bold 16px Arial';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText('PTPal Pose Estimation Ready', this.canvas.width / 2, this.canvas.height / 2 - 70);
-        
-        this.ctx.fillStyle = '#7ED321';
-        this.ctx.font = '14px Arial';
         this.ctx.fillText('Overlay area for pose tracking', this.canvas.width / 2, this.canvas.height / 2 - 50);
     }
     
