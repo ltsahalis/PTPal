@@ -235,6 +235,58 @@ main {
     border-color: #3A7BD5;
 }
 
+/* Pose Data Container */
+.pose-data-container {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    padding: 25px;
+    box-shadow: 0 15px 35px rgba(74, 144, 226, 0.15);
+    max-width: 800px;
+    width: 100%;
+    border: 2px solid rgba(184, 230, 184, 0.3);
+    backdrop-filter: blur(10px);
+    margin-top: 20px;
+}
+
+.pose-data-container h3 {
+    color: #4A90E2;
+    font-size: 1.5rem;
+    margin-bottom: 15px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.pose-data-display {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid #e9ecef;
+}
+
+.data-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+#pose-data-output {
+    background: #2d3748;
+    color: #e2e8f0;
+    padding: 15px;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    border: 1px solid #4a5568;
+}
+
 /* Footer */
 footer {
     text-align: center;
@@ -257,6 +309,16 @@ footer {
     
     .webcam-container {
         padding: 15px;
+    }
+    
+    .pose-data-container {
+        padding: 15px;
+    }
+    
+    .data-header {
+        flex-direction: column;
+        gap: 5px;
+        text-align: center;
     }
     
     .controls {

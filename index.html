@@ -35,12 +35,28 @@
                 <button id="start-btn" class="btn primary">Start Camera</button>
                 <button id="stop-btn" class="btn secondary" disabled>Stop Camera</button>
             </div>
+            
+            <div class="pose-data-container">
+                <h3>Raw Pose Estimation Data</h3>
+                <div class="pose-data-display">
+                    <div class="data-header">
+                        <span>Last Updated: <span id="last-update">Never</span></span>
+                        <span>Next Update: <span id="next-update">--</span></span>
+                    </div>
+                    <pre id="pose-data-output">No pose data available yet. Start the camera to begin pose estimation.</pre>
+                </div>
+            </div>
         </main>
         
         <footer>
             <p>Capstone Project - PTPal Physical Therapy Assistant</p>
         </footer>
     </div>
+    
+    <!-- MediaPipe BlazePose -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js"></script>
     
     <script src="script.js"></script>
 </body>
