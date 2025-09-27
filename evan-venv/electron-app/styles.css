@@ -31,7 +31,7 @@ header {
 
 header h1 {
     font-size: 2.5rem;
-    margin-bottom: 10px;
+    margin-bottom: -10px;
     text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
     color: #4A90E2;
     font-weight: 700;
@@ -59,67 +59,9 @@ header p {
     position: relative;
 }
 
-.logo-figure {
-    width: 100%;
-    height: 100%;
-    position: relative;
-}
-
-.figure-head {
-    width: 16px;
-    height: 16px;
-    background: #4A90E2;
-    border-radius: 50%;
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.figure-body-green {
-    width: 24px;
-    height: 32px;
-    background: #B8E6B8;
-    border-radius: 12px 12px 8px 8px;
-    position: absolute;
-    top: 24px;
-    left: 18px;
-    transform: rotate(-10deg);
-}
-
-.figure-body-blue {
-    width: 24px;
-    height: 32px;
-    background: #B3D9FF;
-    border-radius: 12px 12px 8px 8px;
-    position: absolute;
-    top: 24px;
-    right: 18px;
-    transform: rotate(10deg);
-}
-
-.figure-body-green::before {
-    content: '';
-    width: 8px;
-    height: 20px;
-    background: #7ED321;
-    border-radius: 4px;
-    position: absolute;
-    top: -10px;
-    right: -2px;
-    transform: rotate(15deg);
-}
-
-.figure-body-blue::before {
-    content: '';
-    width: 8px;
-    height: 20px;
-    background: #4A90E2;
-    border-radius: 4px;
-    position: absolute;
-    top: -10px;
-    left: -2px;
-    transform: rotate(-15deg);
+img {
+  width: 100%;
+  height: auto;
 }
 
 /* Main content */
