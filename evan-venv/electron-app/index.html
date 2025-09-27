@@ -2,22 +2,68 @@
 <html>
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ptpal"/>
 
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'"
-    />
-
-    <meta
-        name="description"
-        content="ptpal"
-    />
-    <title>PT Pal</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'"/>
+    
+    <link rel="stylesheet" href="styles.css">
+    <title>PTPal Demo</title>
   </head>
   
   <body>
-    <h1>Hello from Electron renderer!</h1>
-    <p>👋</p>
+    <div class="container">
+        <header>
+            <div class="logo-container">
+                <div class="logo-placeholder">
+                    <div class="logo-figure">
+                        <div class="figure-head"></div>
+                        <div class="figure-body-green"></div>
+                        <div class="figure-body-blue"></div>
+                    </div>
+                </div>
+                <h1>PTPal Demo</h1>
+            </div>
+            <p>Physical Therapy Assistant - Demo</p>
+        </header>
+        
+        <main>
+            <div class="webcam-container">
+                <video id="webcam" autoplay playsinline></video>
+                <canvas id="output-canvas"></canvas>
+                <div class="status">
+                    <span id="status-text">Initializing camera...</span>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button id="start-btn" class="btn primary">Start Camera</button>
+                <button id="stop-btn" class="btn secondary" disabled>Stop Camera</button>
+            </div>
+            
+            <div class="pose-data-container">
+                <h3>Raw Pose Estimation Data</h3>
+                <div class="pose-data-display">
+                    <div class="data-header">
+                        <span>Last Updated: <span id="last-update">Never</span></span>
+                        <span>Next Update: <span id="next-update">--</span></span>
+                    </div>
+                    <pre id="pose-data-output">No pose data available yet. Start the camera to begin pose estimation.</pre>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>Capstone Project - PTPal Physical Therapy Assistant</p>
+        </footer>
+    </div>
+    
+    <!-- MediaPipe BlazePose -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js"></script>
+    
+    <script src="script.js"></script>>
   </body>
 </html>
