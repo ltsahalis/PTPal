@@ -155,6 +155,8 @@ waitForMediaPipe() {
         this.lastPoseData = results;
         this.pose.onResults((r) => { console.log('results', r); this.onPoseResults(r); });
 
+        // Send data to Python backend for storage and processing
+        this.sendPoseDataToBackend(results);
     }
     
     drawPoseLandmarks(landmarks) {
@@ -413,6 +415,42 @@ waitForMediaPipe() {
         
         this.updateStatus(errorMessage, 'error');
         this.updateButtons(false);
+    }
+    
+    async sendPoseDataToBackend(results) {
+        if (!results.poseLandmarks) return;
+        
+        try {
+            const poseData = {
+                timestamp: new Date().toISOString(),
+                landmarks: results.poseLandmarks,
+                worldLandmarks: results.poseWorldLandmarks,
+                sessionId: this.getSessionId()
+            };
+            
+            const response = await fetch('http://localhost:8001/api/pose-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(poseData)
+            });
+            
+            if (!response.ok) {
+                console.log('Backend not running, pose data not saved');
+            }
+        } catch (error) {
+            console.log('Could not send data to backend:', error.message);
+        }
+    }
+    
+    getSessionId() {
+        let sessionId = localStorage.getItem('ptpal_session_id');
+        if (!sessionId) {
+            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('ptpal_session_id', sessionId);
+        }
+        return sessionId;
     }
 }
 
