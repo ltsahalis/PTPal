@@ -55,7 +55,7 @@ def init_database():
 
 def calculate_angle(p1, p2, p3):
     """
-    Calculate angle between three points
+    Calculate angle between t2ee points
     p1: center point, p2: first point, p3: second point
     Returns angle in degrees
     """
