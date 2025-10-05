@@ -337,10 +337,125 @@ def view_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/new-session', methods=['POST'])
+def new_session_notification():
+    """Handle notification that a new session has started"""
+    try:
+        data = request.get_json()
+        session_id = data.get('sessionId')
+        
+        if session_id:
+            print(f"New session started: {session_id}")
+            # The live display will automatically show only this new session
+            # since it queries for the most recent session ID
+            return jsonify({"status": "success", "message": f"New session {session_id} acknowledged"})
+        else:
+            return jsonify({"status": "error", "message": "No session ID provided"}), 400
+            
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "message": "PTPal backend is running"})
+
+@app.route('/', methods=['GET'])
+def live_data_display():
+    """Live data display in organized format - shows only current session, clears when new session starts"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Get the most recent session ID (current session)
+        cursor.execute('''
+            SELECT session_id FROM angle_data 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''')
+        current_session = cursor.fetchone()
+        
+        if not current_session:
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>PTPal Live Data</title>
+                <meta http-equiv="refresh" content="3">
+                <style>
+                    body {{ font-family: monospace; margin: 20px; white-space: pre-line; background: #f0f0f0; }}
+                </style>
+            </head>
+            <body>
+            PTPal Live Data Monitor
+            Session ID: No active session
+            Current Session Records: 0
+            ============================================================
+
+            No data available. Start the camera to begin a new session.
+            </body>
+            </html>
+            """
+        
+        current_session_id = current_session[0]
+        
+        # Get count for current session only
+        cursor.execute('SELECT COUNT(*) FROM angle_data WHERE session_id = ?', (current_session_id,))
+        session_count = cursor.fetchone()[0]
+        
+        # Get all angle data for current session only, ordered by newest first
+        cursor.execute('''
+            SELECT timestamp, shoulder_left, shoulder_right, elbow_left, elbow_right,
+                   hip_left, hip_right, knee_left, knee_right, session_id
+            FROM angle_data 
+            WHERE session_id = ?
+            ORDER BY created_at DESC
+        ''', (current_session_id,))
+        data = cursor.fetchall()
+        conn.close()
+        
+        # Build organized output
+        output = f"PTPal Live Data Monitor\n"
+        output += f"Updates every 3 seconds\n"
+        output += f"Session ID: {current_session_id}\n"
+        output += f"Current Session Records: {session_count}\n"
+        output += "=" * 60 + "\n\n"
+        
+        # Add each record in organized format
+        for record in data:
+            timestamp, shoulder_left, shoulder_right, elbow_left, elbow_right, hip_left, hip_right, knee_left, knee_right, session_id = record
+            
+            # Format timestamp with date and time (convert from UTC to local time)
+            dt_utc = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            # Convert UTC to local time
+            dt_local = dt_utc.astimezone()
+            ts = dt_local.strftime('%Y-%m-%d %H:%M:%S')
+            
+            output += f"[{ts}]\n"
+            output += f"  Shoulders: Left {shoulder_left:.1f}°, Right {shoulder_right:.1f}°\n"
+            output += f"  Elbows:    Left {elbow_left:.1f}°, Right {elbow_right:.1f}°\n"
+            output += f"  Hips:      Left {hip_left:.1f}°, Right {hip_right:.1f}°\n"
+            output += f"  Knees:     Left {knee_left:.1f}°, Right {knee_right:.1f}°\n"
+            output += "\n"
+        
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>PTPal Live Data</title>
+            <meta http-equiv="refresh" content="3">
+            <style>
+                body {{ font-family: monospace; margin: 20px; white-space: pre-line; background: #f0f0f0; }}
+            </style>
+        </head>
+        <body>
+        {output}
+        </body>
+        </html>
+        """
+        
+    except Exception as e:
+        return f"Error loading data: {str(e)}"
 
 if __name__ == '__main__':
     # Initialize database
