@@ -4,9 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="ptpal"/>
-
-    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'"/>
     
     <link rel="stylesheet" href="styles.css">
     <title>PTPal Demo</title>
@@ -25,14 +22,17 @@
         </header>
         
         <main>
-            <div class="webcam-container">
+            <div class="webcam-container" id="webcamContainer">
+                <div class="border-container">
+                    <div class="border border-red" id="border-red"></div>
+                    <div class="border border-green" id="border-green"></div>
+                </div>
                 <video id="webcam" autoplay playsinline></video>
                 <canvas id="output-canvas"></canvas>
-                <div class="status">
-                    <span id="status-text">Initializing camera...</span>
-                </div>
             </div>
-            
+            <div class="status">
+                <span id="status-text">Initializing camera...</span>
+            </div>
             <div class="controls">
                 <button id="start-btn" class="btn primary">Start Camera</button>
                 <button id="stop-btn" class="btn secondary" disabled>Stop Camera</button>

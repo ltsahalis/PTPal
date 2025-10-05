@@ -53,6 +53,8 @@ bower_components/
 # Temporary files
 tmp/
 temp/
+test/
+depthai_blazepose-main
 
 # Build outputs
 dist/

@@ -1,6 +1,33 @@
+const connections = [
+    // Face
+    [0, 1], [1, 2], [2, 3], [3, 7],
+    [0, 4], [4, 5], [5, 6], [6, 8],
+
+    // Torso
+    [9, 10], [11, 12], [11, 13], [13, 15], [12, 14], 
+    [14, 16], [11, 23], [12, 24], [23, 24],
+
+    // Left arm
+    [11, 13], [13, 15], [15, 17], [15, 19],
+    [15, 21], [17, 19], [19, 21],
+    // Right arm
+    [12, 14], [14, 16], [16, 18], [16, 20],
+    [16, 22], [18, 20], [20, 22],
+
+    // Left leg
+    [23, 25], [25, 27], [27, 29], [27, 31], [29, 31],
+    // Right leg
+    [24, 26], [26, 28], [28, 30], [28, 32], [30, 32]
+];
+
+
+
+
 class WebcamManager {
     constructor() {
         this.video = document.getElementById('webcam');
+        this.border_green = document.getElementById('border-green');
+        this.border_red = document.getElementById('border-red');
         this.canvas = document.getElementById('output-canvas');
         this.ctx = this.canvas.getContext('2d');
         this.statusText = document.getElementById('status-text');
@@ -66,26 +93,26 @@ class WebcamManager {
         }
     }
     
-waitForMediaPipe() {
-  return new Promise((resolve, reject) => {
-    let attempts = 0;
-    const maxAttempts = 200;
-    const check = () => {
-      attempts++;
-      const hasPose = typeof window.Pose   !== 'undefined';
-      const hasCamera = typeof window.Camera !== 'undefined';
-      if (hasPose && hasCamera) {
-        resolve();
-      } else if (attempts >= maxAttempts) {
-        console.error('Pose defined?', hasPose, 'Camera defined?', hasCamera);
-        reject(new Error('MediaPipe failed to load after 20 seconds.'));
-      } else {
-        setTimeout(check, 100);
-      }
-    };
-    check();
-  });
-}
+    waitForMediaPipe() {
+        return new Promise((resolve, reject) => {
+            let attempts = 0;
+            const maxAttempts = 200;
+            const check = () => {
+            attempts++;
+            const hasPose = typeof window.Pose   !== 'undefined';
+            const hasCamera = typeof window.Camera !== 'undefined';
+            if (hasPose && hasCamera) {
+                resolve();
+            } else if (attempts >= maxAttempts) {
+                console.error('Pose defined?', hasPose, 'Camera defined?', hasCamera);
+                reject(new Error('MediaPipe failed to load after 20 seconds.'));
+            } else {
+                setTimeout(check, 100);
+            }
+            };
+            check();
+        });
+    }
 
     
     async startWebcam() {
@@ -149,6 +176,7 @@ waitForMediaPipe() {
         if (results.poseLandmarks) {
             this.drawPoseLandmarks(results.poseLandmarks);
             this.drawPoseConnections(results.poseLandmarks);
+            this.drawPoseAvatar(results.poseLandmarks);
         }
         
         // Store the latest pose data - EXACT BlazePose format
@@ -179,30 +207,8 @@ waitForMediaPipe() {
     }
     
     drawPoseConnections(landmarks) {
-        const connections = [
-            // Face
-            [0, 1], [1, 2], [2, 3], [3, 7],
-            [0, 4], [4, 5], [5, 6], [6, 8],
-            // Torso
-            [9, 10], [11, 12], [11, 13], [13, 15],
-            [12, 14], [14, 16], [11, 23], [12, 24],
-            [23, 24],
-            // Left arm
-            [11, 13], [13, 15], [15, 17], [15, 19], [15, 21],
-            [17, 19], [19, 21],
-            // Right arm
-            [12, 14], [14, 16], [16, 18], [16, 20], [16, 22],
-            [18, 20], [20, 22],
-            // Left leg
-            [23, 25], [25, 27], [27, 29], [27, 31],
-            [29, 31],
-            // Right leg
-            [24, 26], [26, 28], [28, 30], [28, 32],
-            [30, 32]
-        ];
-        
         this.ctx.strokeStyle = '#4A90E2';
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = this.canvas.width/20;
         
         connections.forEach(([start, end]) => {
             if (landmarks[start] && landmarks[end]) {
@@ -219,6 +225,25 @@ waitForMediaPipe() {
             }
         });
     }
+
+    drawPoseAvatar(landmarks) {
+        this.ctx.fillStyle = '#4A90E2';
+        const x = landmarks[0].x * this.canvas.width;
+        const y = landmarks[0].y * this.canvas.height;
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, this.canvas.width/8, 0, 2*Math.PI);
+        this.ctx.fill();
+        this.ctx.closePath();
+    }
+
+    // whatever criteria to show on target
+    toggleBorder(border_color = null) {
+        this.border_green.style.display = 'none';
+        this.border_red.style.display = 'none';
+        if (border_color == 'GREEN') { this.border_green.style.display = 'block'; } 
+        else if (border_color == 'RED') { this.border_red.style.display = 'block'; }
+    }
+
     
     startUpdateTimer() {
         // Clear any existing timer
