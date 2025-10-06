@@ -20,6 +20,21 @@ class WebcamManager {
         this.nextUpdateTime = null;
         this.lastPoseData = null;
         
+        // Out-of-frame detection variables
+        this.lostFrames = 0;
+        this.recentCenters = [];
+        this.sideCounts = { left: 0, right: 0, top: 0, bottom: 0 };
+        this.isOutOfFrame = false;
+        this.isPartiallyOut = false;
+        this.webcamContainer = document.querySelector('.webcam-container');
+        
+        // Detection parameters (adapted from Python script)
+        this.EDGE_MARGIN = 60;        // outer guide box
+        this.SAFE_MARGIN = 80;       // inner safe zone
+        this.PARTIAL_FRAMES = 2;     // delay to prevent flickering
+        this.VIS_THRESH = 0.85;      // visibility threshold
+        this.LOST_FRAMES_LIMIT = 10; // frames before declaring out of frame
+        
         this.initializeEventListeners();
         this.initializePose();
     }
@@ -149,12 +164,18 @@ waitForMediaPipe() {
         if (results.poseLandmarks) {
             this.drawPoseLandmarks(results.poseLandmarks);
             this.drawPoseConnections(results.poseLandmarks);
+            
+            // Check for out-of-frame detection
+            this.checkOutOfFrame(results.poseLandmarks);
+        } else {
+            // No pose detected - increment lost frames
+            this.lostFrames++;
+            this.handleNoPoseDetected();
         }
         
         // Store the latest pose data - EXACT BlazePose format
         this.lastPoseData = results;
         this.pose.onResults((r) => { console.log('results', r); this.onPoseResults(r); });
-
     }
     
     drawPoseLandmarks(landmarks) {
@@ -356,6 +377,16 @@ waitForMediaPipe() {
         this.lastUpdate.textContent = 'Never';
         this.nextUpdate.textContent = '--';
         this.lastPoseData = null;
+        
+        // Reset frame detection state
+        this.lostFrames = 0;
+        this.recentCenters = [];
+        this.sideCounts = { left: 0, right: 0, top: 0, bottom: 0 };
+        this.isOutOfFrame = false;
+        this.isPartiallyOut = false;
+        
+        // Reset webcam container border
+        this.webcamContainer.classList.remove('in-frame', 'partially-out', 'out-of-frame');
     }
     
     setupCanvas() {
@@ -382,6 +413,9 @@ waitForMediaPipe() {
                 break;
             case 'error':
                 this.statusText.style.color = '#E53E3E';
+                break;
+            case 'warning':
+                this.statusText.style.color = '#FFA500';
                 break;
             case 'info':
                 this.statusText.style.color = '#4A90E2';
@@ -413,6 +447,135 @@ waitForMediaPipe() {
         
         this.updateStatus(errorMessage, 'error');
         this.updateButtons(false);
+    }
+    
+    // Out-of-frame detection methods
+    checkOutOfFrame(landmarks) {
+        this.lostFrames = 0; // Reset lost frames since we have a pose
+        
+        // Calculate bounding box from pose landmarks
+        const bounds = this.calculatePoseBounds(landmarks);
+        if (!bounds) return;
+        
+        const { x, y, width, height, centerX, centerY } = bounds;
+        const canvasWidth = this.canvas.width;
+        const canvasHeight = this.canvas.height;
+        
+        // Store recent center for tracking
+        this.recentCenters.push({ x: centerX, y: centerY });
+        if (this.recentCenters.length > 15) {
+            this.recentCenters.shift();
+        }
+        
+        // Check if pose is partially out of safe zone
+        const sidesCrossed = this.checkSidesCrossed(x, y, width, height, canvasWidth, canvasHeight);
+        
+        // Update side counts with smoothing
+        for (const side of ['left', 'right', 'top', 'bottom']) {
+            this.sideCounts[side] = Math.max(0, this.sideCounts[side] - 1);
+        }
+        
+        for (const side of sidesCrossed) {
+            this.sideCounts[side] += 2;
+        }
+        
+        // Check if any side has been crossed for enough frames
+        this.isPartiallyOut = false;
+        for (const side of ['left', 'right', 'top', 'bottom']) {
+            if (this.sideCounts[side] >= this.PARTIAL_FRAMES * 2) {
+                this.isPartiallyOut = true;
+                break;
+            }
+        }
+        
+        // Check visibility ratio
+        const visibilityRatio = this.calculateVisibilityRatio(x, y, width, height, canvasWidth, canvasHeight);
+        
+        if (visibilityRatio < this.VIS_THRESH) {
+            this.isPartiallyOut = true;
+        }
+        
+        this.isOutOfFrame = false;
+        this.updateFrameStatus();
+    }
+    
+    calculatePoseBounds(landmarks) {
+        if (!landmarks || landmarks.length === 0) return null;
+        
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let validLandmarks = 0;
+        
+        landmarks.forEach(landmark => {
+            if (landmark.visibility > 0.5) { // Only consider visible landmarks
+                const x = landmark.x * this.canvas.width;
+                const y = landmark.y * this.canvas.height;
+                
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+                validLandmarks++;
+            }
+        });
+        
+        if (validLandmarks < 5) return null; // Need at least 5 visible landmarks
+        
+        return {
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY,
+            centerX: (minX + maxX) / 2,
+            centerY: (minY + maxY) / 2
+        };
+    }
+    
+    checkSidesCrossed(x, y, width, height, canvasWidth, canvasHeight) {
+        const sides = [];
+        
+        if (x < this.SAFE_MARGIN) sides.push('left');
+        if (x + width > canvasWidth - this.SAFE_MARGIN) sides.push('right');
+        if (y < this.SAFE_MARGIN) sides.push('top');
+        if (y + height > canvasHeight - this.SAFE_MARGIN) sides.push('bottom');
+        
+        return sides;
+    }
+    
+    calculateVisibilityRatio(x, y, width, height, canvasWidth, canvasHeight) {
+        const clampedX = Math.max(0, x);
+        const clampedY = Math.max(0, y);
+        const clampedWidth = Math.min(canvasWidth, x + width) - clampedX;
+        const clampedHeight = Math.min(canvasHeight, y + height) - clampedY;
+        
+        const visibleArea = Math.max(0, clampedWidth) * Math.max(0, clampedHeight);
+        const totalArea = width * height;
+        
+        return totalArea > 0 ? visibleArea / totalArea : 0;
+    }
+    
+    handleNoPoseDetected() {
+        if (this.lostFrames >= this.LOST_FRAMES_LIMIT) {
+            this.isOutOfFrame = true;
+            this.isPartiallyOut = false;
+        }
+        this.updateFrameStatus();
+    }
+    
+    updateFrameStatus() {
+        // Remove all frame status classes
+        this.webcamContainer.classList.remove('in-frame', 'partially-out', 'out-of-frame');
+        
+        // Update border color based on frame status
+        if (this.isOutOfFrame) {
+            this.webcamContainer.classList.add('out-of-frame');
+            this.updateStatus('OUT OF FRAME - Please move back into view', 'error');
+        } else if (this.isPartiallyOut) {
+            this.webcamContainer.classList.add('partially-out');
+            this.updateStatus('PARTIALLY OUT OF FRAME - Please center yourself', 'warning');
+        } else {
+            this.webcamContainer.classList.add('in-frame');
+            this.updateStatus('IN FRAME - Good position!', 'success');
+        }
     }
 }
 
