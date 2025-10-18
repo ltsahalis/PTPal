@@ -465,12 +465,18 @@ if __name__ == "__main__":
     for k, m in sample.items():
         res = evaluate_pose(k, m)
         print(f"{res.pose}: score={res.score}, pass={res.pass_fail}, reasons={res.reasons}")
-        response = client.responses.create(
-        model="gpt-4.1",
-        input= build_llm_messages(res),
-        store=True,
-)
+        # Only use LLM if client is available
+        if client:
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4",
+                    messages=build_llm_messages(res),
+                    response_format={"type": "json_object"}
+                )
+                print(f"LLM Response: {response.choices[0].message.content}")
+            except Exception as e:
+                print(f"LLM Error: {e}")
+        else:
+            print("LLM client not available (no API key)")
 
 
-
-print(response.output_text)
