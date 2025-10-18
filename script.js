@@ -470,13 +470,23 @@ waitForMediaPipe() {
         // Check if pose is partially out of safe zone
         const sidesCrossed = this.checkSidesCrossed(x, y, width, height, canvasWidth, canvasHeight);
         
-        // Update side counts with smoothing
-        for (const side of ['left', 'right', 'top', 'bottom']) {
-            this.sideCounts[side] = Math.max(0, this.sideCounts[side] - 1);
-        }
-        
-        for (const side of sidesCrossed) {
-            this.sideCounts[side] += 2;
+        // Update side counts with smoothing - reset if no sides crossed
+        if (sidesCrossed.length === 0) {
+            // If no sides crossed, reset all counts
+            for (const side of ['left', 'right', 'top', 'bottom']) {
+                this.sideCounts[side] = 0;
+            }
+        } else {
+            // If sides are crossed, increment those sides
+            for (const side of sidesCrossed) {
+                this.sideCounts[side] += 2;
+            }
+            // Decrement non-crossed sides
+            for (const side of ['left', 'right', 'top', 'bottom']) {
+                if (!sidesCrossed.includes(side)) {
+                    this.sideCounts[side] = Math.max(0, this.sideCounts[side] - 1);
+                }
+            }
         }
         
         // Check if any side has been crossed for enough frames
@@ -490,10 +500,20 @@ waitForMediaPipe() {
         
         // Check visibility ratio
         const visibilityRatio = this.calculateVisibilityRatio(x, y, width, height, canvasWidth, canvasHeight);
+        console.log('Visibility ratio:', visibilityRatio, 'Threshold:', this.VIS_THRESH);
         
         if (visibilityRatio < this.VIS_THRESH) {
             this.isPartiallyOut = true;
+            console.log('Partially out due to low visibility ratio');
         }
+        
+        // Log final status before update
+        console.log('Final frame status:', {
+            isPartiallyOut: this.isPartiallyOut,
+            sidesCrossed: sidesCrossed,
+            sideCounts: this.sideCounts,
+            visibilityRatio: visibilityRatio
+        });
         
         this.isOutOfFrame = false;
         this.updateFrameStatus();
@@ -533,10 +553,22 @@ waitForMediaPipe() {
     checkSidesCrossed(x, y, width, height, canvasWidth, canvasHeight) {
         const sides = [];
         
+        // Debug the bottom check specifically
+        const bottomCheck = y + height > canvasHeight - this.SAFE_MARGIN;
+        console.log('Bottom check debug:', {
+            y: y,
+            height: height,
+            yPlusHeight: y + height,
+            canvasHeight: canvasHeight,
+            safeMargin: this.SAFE_MARGIN,
+            threshold: canvasHeight - this.SAFE_MARGIN,
+            bottomCrossed: bottomCheck
+        });
+        
         if (x < this.SAFE_MARGIN) sides.push('left');
         if (x + width > canvasWidth - this.SAFE_MARGIN) sides.push('right');
         if (y < this.SAFE_MARGIN) sides.push('top');
-        if (y + height > canvasHeight - this.SAFE_MARGIN) sides.push('bottom');
+        if (bottomCheck) sides.push('bottom');
         
         return sides;
     }
