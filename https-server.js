@@ -1,8 +1,14 @@
-const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-const server = http.createServer((req, res) => {
+// Self-signed certificate configuration
+const options = {
+  key: fs.readFileSync('key.pem'),
+  cert: fs.readFileSync('cert.pem')
+};
+
+const server = https.createServer(options, (req, res) => {
   // Remove leading slash from URL path
   let filePath = req.url.substring(1);
   
@@ -49,6 +55,7 @@ const server = http.createServer((req, res) => {
 
 const PORT = 3000;
 server.listen(PORT, () => {
-  console.log(`HTTP Server running on http://localhost:${PORT}`);
-  console.log('WARNING: For camera access, you\'ll still need HTTPS server (run https-server.js instead)');
+  console.log(`HTTPS Server running on https://localhost:${PORT}`);
+  console.log('Note: You will see a security warning. Click "Advanced" and "Proceed to localhost"');
 });
+

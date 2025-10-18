@@ -82,3 +82,11 @@ venv.bak/
 *.pkl
 *.h5
 *.model
+
+# SSL Certificates (self-signed, generated during setup)
+*.pem
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
