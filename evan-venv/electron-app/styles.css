@@ -177,7 +177,7 @@ main {
     display: flex;
     gap: 15px;
     justify-content: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .btn {
@@ -205,6 +205,18 @@ main {
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
+}
+
+.btn.select {
+    width: 200px;
+    background: linear-gradient(135deg, #7ED321 0%, #B8E6B8 100%);
+    color: white;
+    border: 2px solid #7ED321;
+}
+
+.btn.select:hover:not(:disabled) {
+    background: linear-gradient(135deg, #6BC018 0%, #A8D8A8 100%);
+    border-color: #6BC018;
 }
 
 .btn.primary {
