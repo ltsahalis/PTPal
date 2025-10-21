@@ -5,6 +5,7 @@ import json
 import os
 from datetime import datetime
 import math
+from validate_pose import evaluate_pose, POSE_DISPATCH
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for cross-origin requests
@@ -206,6 +207,185 @@ def receive_pose_data():
         
     except Exception as e:
         print(f"Error processing pose data: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+def compute_pose_metrics(pose_type, landmarks):
+    """
+    Compute all required metrics for a specific pose type from landmarks.
+    Returns a dictionary of metrics needed for validation.
+    """
+    if not landmarks or len(landmarks) < 33:
+        return {}
+    
+    metrics = {}
+    
+    try:
+        # Landmark indices
+        LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
+        LEFT_HIP, RIGHT_HIP = 23, 24
+        LEFT_KNEE, RIGHT_KNEE = 25, 26
+        LEFT_ANKLE, RIGHT_ANKLE = 27, 28
+        LEFT_HEEL, RIGHT_HEEL = 29, 30
+        LEFT_TOE, RIGHT_TOE = 31, 32
+        LEFT_WRIST, RIGHT_WRIST = 15, 16
+        
+        # === Common calculations ===
+        
+        # Knee flexion angle (hip-knee-ankle)
+        knee_left_angle = calculate_angle(landmarks[LEFT_KNEE], landmarks[LEFT_HIP], landmarks[LEFT_ANKLE])
+        knee_right_angle = calculate_angle(landmarks[RIGHT_KNEE], landmarks[RIGHT_HIP], landmarks[RIGHT_ANKLE])
+        metrics['knee_flexion_deg'] = (knee_left_angle + knee_right_angle) / 2
+        metrics['knee_flexion_left_deg'] = knee_left_angle
+        metrics['knee_flexion_right_deg'] = knee_right_angle
+        
+        # Hip-knee-ankle alignment (frontal plane - knee valgus/varus)
+        # Measure horizontal deviation of knee from hip-ankle line
+        left_knee_x_deviation = abs(landmarks[LEFT_KNEE]['x'] - landmarks[LEFT_HIP]['x']) * 100
+        right_knee_x_deviation = abs(landmarks[RIGHT_KNEE]['x'] - landmarks[RIGHT_HIP]['x']) * 100
+        metrics['hip_knee_ankle_alignment_deg'] = (left_knee_x_deviation + right_knee_x_deviation) / 2
+        
+        # Heel height (vertical distance from ankle to heel)
+        left_heel_height = abs(landmarks[LEFT_HEEL]['y'] - landmarks[LEFT_ANKLE]['y']) * 170  # Approx cm
+        right_heel_height = abs(landmarks[RIGHT_HEEL]['y'] - landmarks[RIGHT_ANKLE]['y']) * 170
+        metrics['heel_height_cm'] = (left_heel_height + right_heel_height) / 2
+        
+        # Trunk forward lean (angle from vertical)
+        mid_shoulder_x = (landmarks[LEFT_SHOULDER]['x'] + landmarks[RIGHT_SHOULDER]['x']) / 2
+        mid_shoulder_y = (landmarks[LEFT_SHOULDER]['y'] + landmarks[RIGHT_SHOULDER]['y']) / 2
+        mid_hip_x = (landmarks[LEFT_HIP]['x'] + landmarks[RIGHT_HIP]['x']) / 2
+        mid_hip_y = (landmarks[LEFT_HIP]['y'] + landmarks[RIGHT_HIP]['y']) / 2
+        
+        trunk_lean_rad = math.atan2(abs(mid_shoulder_x - mid_hip_x), abs(mid_shoulder_y - mid_hip_y))
+        metrics['trunk_forward_lean_deg'] = math.degrees(trunk_lean_rad)
+        
+        # Bilateral symmetry
+        if metrics['knee_flexion_left_deg'] > 0 or metrics['knee_flexion_right_deg'] > 0:
+            max_knee = max(metrics['knee_flexion_left_deg'], metrics['knee_flexion_right_deg'])
+            if max_knee > 0:
+                metrics['symmetry_diff_pct'] = abs(metrics['knee_flexion_left_deg'] - metrics['knee_flexion_right_deg']) / max_knee * 100
+            else:
+                metrics['symmetry_diff_pct'] = 0
+        else:
+            metrics['symmetry_diff_pct'] = 0
+        
+        # Pelvic drop/obliquity (hip height difference)
+        hip_height_diff = abs(landmarks[LEFT_HIP]['y'] - landmarks[RIGHT_HIP]['y'])
+        metrics['pelvic_drop_deg'] = hip_height_diff * 100  # Convert to approximate degrees
+        
+        # Ankle roll (simplified - would need 3D for accurate measurement)
+        metrics['ankle_roll_deg'] = 0  # Placeholder - needs world landmarks
+        
+        # === Pose-specific calculations ===
+        
+        if pose_type == 'partial_squat':
+            # Already have: knee_flexion_deg, hip_knee_ankle_alignment_deg, heel_height_cm, trunk_forward_lean_deg
+            pass
+        
+        elif pose_type == 'heel_raises':
+            # Already have: heel_height_cm, symmetry_diff_pct, ankle_roll_deg
+            pass
+        
+        elif pose_type in ['single_leg_stance', 'tree_pose']:
+            # Hold time and sway need temporal data - set defaults
+            metrics['hold_time_s'] = 0  # Must be tracked over time
+            metrics['sway_peak_deg'] = 0  # Must be tracked over time
+            
+            # Arm overhead alignment (for tree pose)
+            if landmarks[LEFT_WRIST]['y'] < landmarks[LEFT_SHOULDER]['y'] and landmarks[RIGHT_WRIST]['y'] < landmarks[RIGHT_SHOULDER]['y']:
+                wrist_height_diff = abs(landmarks[LEFT_WRIST]['y'] - landmarks[RIGHT_WRIST]['y'])
+                metrics['arm_overhead_alignment_deg'] = wrist_height_diff * 100
+            else:
+                metrics['arm_overhead_alignment_deg'] = 20  # Arms not raised
+        
+        elif pose_type == 'tandem_stance':
+            # Foot line deviation (heel-to-toe alignment)
+            # Check if feet are in line (front foot heel close to back foot toe)
+            front_heel_x = landmarks[LEFT_HEEL]['x']  # Assume left is front
+            back_toe_x = landmarks[RIGHT_TOE]['x']
+            foot_deviation = abs(front_heel_x - back_toe_x) * 100
+            metrics['foot_line_deviation_deg'] = foot_deviation
+            metrics['hold_time_s'] = 0  # Must be tracked over time
+        
+        elif pose_type == 'functional_reach':
+            # Reach distance ratio (forward reach distance / arm length)
+            # Estimate arm length
+            arm_length = math.sqrt(
+                (landmarks[LEFT_SHOULDER]['x'] - landmarks[LEFT_WRIST]['x'])**2 +
+                (landmarks[LEFT_SHOULDER]['y'] - landmarks[LEFT_WRIST]['y'])**2
+            )
+            
+            # Forward reach approximation (how far forward the wrist is from shoulder)
+            reach_forward = abs(landmarks[LEFT_WRIST]['x'] - landmarks[LEFT_SHOULDER]['x'])
+            
+            if arm_length > 0:
+                metrics['reach_distance_ratio'] = reach_forward / arm_length
+            else:
+                metrics['reach_distance_ratio'] = 0
+            
+            metrics['stepped_during_task'] = 0.0  # Must be tracked over time
+        
+        return metrics
+        
+    except Exception as e:
+        print(f"Error computing pose metrics: {e}")
+        return {}
+
+@app.route('/api/validate-pose', methods=['POST'])
+def validate_pose_endpoint():
+    """Validate pose quality and return detailed feedback"""
+    try:
+        data = request.get_json()
+        pose_type = data.get('pose_type', 'partial_squat')
+        landmarks = data.get('landmarks')
+        
+        if not landmarks or len(landmarks) < 33:
+            return jsonify({"status": "error", "message": "Invalid landmarks"}), 400
+        
+        # Map common names to validator keys
+        pose_type_map = {
+            'squat': 'partial_squat',
+            'heel_raise': 'heel_raises',
+            'balance': 'single_leg_stance',
+            'single_leg': 'single_leg_stance',
+            'tandem': 'tandem_stance',
+            'reach': 'functional_reach',
+            'tree': 'tree_pose'
+        }
+        
+        # Convert to validator key
+        validator_key = pose_type_map.get(pose_type, pose_type)
+        
+        if validator_key not in POSE_DISPATCH:
+            return jsonify({
+                "status": "error",
+                "message": f"Unknown pose type. Valid types: {list(POSE_DISPATCH.keys())}"
+            }), 400
+        
+        # Compute metrics for this pose
+        metrics = compute_pose_metrics(validator_key, landmarks)
+        
+        # Validate using the pose validator
+        result = evaluate_pose(validator_key, metrics)
+        
+        return jsonify({
+            "status": "success",
+            "pose": result.pose,
+            "score": result.score,
+            "pass": result.pass_fail,
+            "feedback": result.reasons,
+            "metrics": result.metrics,
+            "all_computed_metrics": metrics  # Show all computed values
+        })
+        
+    except KeyError as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Missing required metric: {str(e)}. Some metrics may require temporal tracking."
+        }), 400
+    except Exception as e:
+        print(f"Error validating pose: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/angles/<session_id>', methods=['GET'])
@@ -462,4 +642,13 @@ if __name__ == '__main__':
     init_database()
     print("Starting PTPal Backend...")
     print("Backend will receive pose data for processing and storage")
-    app.run(debug=True, host='localhost', port=8001)
+    print("Running on HTTPS: https://localhost:8001")
+    print("Note: You will see a security warning. Click 'Advanced' and 'Proceed to localhost'")
+    
+    # Run with HTTPS using SSL certificates
+    app.run(
+        debug=True, 
+        host='localhost', 
+        port=8001,
+        ssl_context=('backend-cert.pem', 'backend-key.pem')
+    )

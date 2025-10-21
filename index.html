@@ -36,6 +36,49 @@
                 <button id="stop-btn" class="btn secondary" disabled>Stop Camera</button>
             </div>
             
+            <div class="feedback-container">
+                <h3>Pose Validation & Feedback</h3>
+                <div class="pose-selector">
+                    <label for="pose-type-select">Select Pose Type:</label>
+                    <select id="pose-type-select">
+                        <option value="partial_squat">Partial Squat</option>
+                        <option value="heel_raises">Heel Raises</option>
+                        <option value="single_leg_stance">Single Leg Stance</option>
+                        <option value="tandem_stance">Tandem Stance</option>
+                        <option value="functional_reach">Functional Reach</option>
+                        <option value="tree_pose">Tree Pose</option>
+                    </select>
+                    <button id="start-feedback-btn" class="btn tertiary" disabled>Start Real-time Feedback</button>
+                    <button id="stop-feedback-btn" class="btn tertiary" disabled>Stop Feedback</button>
+                </div>
+                
+                <div class="feedback-display">
+                    <div class="score-section">
+                        <div class="score-circle">
+                            <span id="score-value">--</span>
+                            <span class="score-label">Score</span>
+                        </div>
+                        <div class="pass-indicator">
+                            <span id="pass-status">--</span>
+                        </div>
+                    </div>
+                    
+                    <div class="feedback-section">
+                        <h4>Real-time Feedback:</h4>
+                        <ul id="feedback-list">
+                            <li>Select a pose type and start feedback to begin</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="metrics-section">
+                        <h4>Current Metrics:</h4>
+                        <div id="metrics-display">
+                            <p>No metrics available yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <div class="pose-data-container">
                 <h3>Raw Pose Estimation Data</h3>
                 <div class="pose-data-display">
