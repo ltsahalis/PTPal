@@ -1,3 +1,201 @@
+// Enhanced REST approach with polling for real-time feedback
+class RealTimeFeedbackREST {
+    constructor() {
+        this.pollingInterval = null;
+        this.isActive = false;
+        this.currentPoseType = 'partial_squat';
+        this.lastPoseData = null;
+        
+        // UI elements
+        this.poseTypeSelect = document.getElementById('pose-type-select');
+        this.startFeedbackBtn = document.getElementById('start-feedback-btn');
+        this.stopFeedbackBtn = document.getElementById('stop-feedback-btn');
+        this.scoreValue = document.getElementById('score-value');
+        this.passStatus = document.getElementById('pass-status');
+        this.feedbackList = document.getElementById('feedback-list');
+        this.metricsDisplay = document.getElementById('metrics-display');
+        
+        this.initializeEventListeners();
+    }
+    
+    initializeEventListeners() {
+        this.poseTypeSelect.addEventListener('change', (e) => {
+            this.currentPoseType = e.target.value;
+        });
+        
+        this.startFeedbackBtn.addEventListener('click', () => {
+            this.startRealTimeFeedback();
+        });
+        
+        this.stopFeedbackBtn.addEventListener('click', () => {
+            this.stopRealTimeFeedback();
+        });
+    }
+    
+    setLastPoseData(poseData) {
+        this.lastPoseData = poseData;
+    }
+    
+    startRealTimeFeedback() {
+        if (this.isActive) return;
+        
+        this.isActive = true;
+        this.currentPoseType = this.poseTypeSelect.value;
+        
+        // Update UI
+        this.startFeedbackBtn.disabled = true;
+        this.stopFeedbackBtn.disabled = false;
+        this.poseTypeSelect.disabled = true;
+        
+        // Clear previous feedback
+        this.clearFeedback();
+        
+        // Start polling every 500ms for validation
+        this.pollingInterval = setInterval(async () => {
+            if (this.lastPoseData && this.lastPoseData.poseLandmarks) {
+                try {
+                    const feedback = await this.validatePose(this.currentPoseType, this.lastPoseData);
+                    this.displayFeedback(feedback);
+                } catch (error) {
+                    console.error('Error getting feedback:', error);
+                    this.showError('Error getting feedback: ' + error.message);
+                }
+            }
+        }, 500);
+        
+        console.log(`Started real-time feedback for ${this.currentPoseType}`);
+    }
+    
+    stopRealTimeFeedback() {
+        if (!this.isActive) return;
+        
+        this.isActive = false;
+        
+        // Clear polling interval
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+        }
+        
+        // Update UI
+        this.startFeedbackBtn.disabled = false;
+        this.stopFeedbackBtn.disabled = true;
+        this.poseTypeSelect.disabled = false;
+        
+        // Clear feedback
+        this.clearFeedback();
+        
+        console.log('Stopped real-time feedback');
+    }
+    
+    async validatePose(poseType, results) {
+        const response = await fetch('https://localhost:8001/api/validate-pose', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                pose_type: poseType,
+                landmarks: results.poseLandmarks
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        return await response.json();
+    }
+    
+    displayFeedback(feedback) {
+        // Update score
+        this.scoreValue.textContent = feedback.score || '--';
+        
+        // Update pass/fail status
+        this.updatePassStatus(feedback.pass);
+        
+        // Update feedback list
+        this.updateFeedbackList(feedback.feedback || []);
+        
+        // Update metrics display
+        this.updateMetricsDisplay(feedback.metrics || {});
+        
+        // Add visual feedback based on score
+        this.updateScoreIndicator(feedback.score);
+    }
+    
+    updatePassStatus(pass) {
+        this.passStatus.textContent = pass ? 'PASS' : 'FAIL';
+        this.passStatus.className = 'pass-indicator ' + (pass ? 'pass' : 'fail');
+    }
+    
+    updateFeedbackList(feedbackArray) {
+        if (feedbackArray.length === 0) {
+            this.feedbackList.innerHTML = '<li>No specific feedback available</li>';
+            return;
+        }
+        
+        this.feedbackList.innerHTML = feedbackArray.map(f => `<li>${f}</li>`).join('');
+    }
+    
+    updateMetricsDisplay(metrics) {
+        if (Object.keys(metrics).length === 0) {
+            this.metricsDisplay.innerHTML = '<p>No metrics available yet</p>';
+            return;
+        }
+        
+        const metricsHtml = Object.entries(metrics)
+            .map(([key, value]) => {
+                const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const formattedValue = typeof value === 'number' ? value.toFixed(2) : value;
+                return `<div><strong>${formattedKey}:</strong> ${formattedValue}</div>`;
+            })
+            .join('');
+        
+        this.metricsDisplay.innerHTML = metricsHtml;
+    }
+    
+    updateScoreIndicator(score) {
+        const scoreCircle = document.querySelector('.score-circle');
+        if (!scoreCircle) return;
+        
+        // Update color based on score
+        if (score >= 80) {
+            scoreCircle.style.background = 'linear-gradient(135deg, #48BB78, #38A169)'; // Green
+        } else if (score >= 60) {
+            scoreCircle.style.background = 'linear-gradient(135deg, #ED8936, #DD6B20)'; // Orange
+        } else {
+            scoreCircle.style.background = 'linear-gradient(135deg, #F56565, #E53E3E)'; // Red
+        }
+    }
+    
+    clearFeedback() {
+        this.scoreValue.textContent = '--';
+        this.passStatus.textContent = '--';
+        this.passStatus.className = 'pass-indicator neutral';
+        this.feedbackList.innerHTML = '<li>Select a pose type and start feedback to begin</li>';
+        this.metricsDisplay.innerHTML = '<p>No metrics available yet</p>';
+        
+        // Reset score circle color
+        const scoreCircle = document.querySelector('.score-circle');
+        if (scoreCircle) {
+            scoreCircle.style.background = 'linear-gradient(135deg, #4A90E2, #63B3ED)';
+        }
+    }
+    
+    showError(message) {
+        this.feedbackList.innerHTML = `<li style="color: #E53E3E; border-left-color: #E53E3E;">${message}</li>`;
+    }
+    
+    // Method to enable/disable feedback based on camera status
+    setCameraStatus(isStreaming) {
+        this.startFeedbackBtn.disabled = !isStreaming;
+        if (!isStreaming) {
+            this.stopRealTimeFeedback();
+        }
+    }
+}
+
 class WebcamManager {
     constructor() {
         this.video = document.getElementById('webcam');
@@ -19,6 +217,9 @@ class WebcamManager {
         this.updateTimer = null;
         this.nextUpdateTime = null;
         this.lastPoseData = null;
+        
+        // Initialize real-time feedback system
+        this.feedbackSystem = new RealTimeFeedbackREST();
         
         // Out-of-frame detection variables
         this.lostFrames = 0;
@@ -135,6 +336,9 @@ waitForMediaPipe() {
                 this.updateStatus('Camera active - BlazePose running', 'success');
                 this.updateButtons(true);
                 
+                // Enable feedback system
+                this.feedbackSystem.setCameraStatus(true);
+                
                 // Initialize camera for pose estimation
                 this.initializeCamera();
                 
@@ -171,7 +375,7 @@ waitForMediaPipe() {
         if (results.poseLandmarks) {
             this.drawPoseLandmarks(results.poseLandmarks);
             this.drawPoseConnections(results.poseLandmarks);
-            
+            this.drawPoseAvatar(results.poseLandmarks);
             // Check for out-of-frame detection
             this.checkOutOfFrame(results.poseLandmarks);
         } else {
@@ -183,6 +387,9 @@ waitForMediaPipe() {
         // Store the latest pose data - EXACT BlazePose format
         this.lastPoseData = results;
         this.pose.onResults((r) => { console.log('results', r); this.onPoseResults(r); });
+
+        // Update feedback system with latest pose data
+        this.feedbackSystem.setLastPoseData(results);
 
         // Send data to Python backend for storage and processing
         this.sendPoseDataToBackend(results);
@@ -233,7 +440,7 @@ waitForMediaPipe() {
         ];
         
         this.ctx.strokeStyle = '#4A90E2';
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = this.canvas.width/20;
         
         connections.forEach(([start, end]) => {
             if (landmarks[start] && landmarks[end]) {
@@ -249,6 +456,15 @@ waitForMediaPipe() {
                 this.ctx.stroke();
             }
         });
+    }
+    drawPoseAvatar(landmarks) {
+        this.ctx.fillStyle = '#4A90E2';
+        const x = landmarks[0].x * this.canvas.width;
+        const y = landmarks[0].y * this.canvas.height;
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, this.canvas.width/8, 0, 2*Math.PI);
+        this.ctx.fill();
+        this.ctx.closePath();
     }
     
     startUpdateTimer() {
@@ -376,6 +592,9 @@ waitForMediaPipe() {
         
         this.video.srcObject = null;
         this.isStreaming = false;
+        
+        // Disable feedback system
+        this.feedbackSystem.setCameraStatus(false);
         
         // Clear current session data from localStorage (but keep in SQLite)
         localStorage.removeItem('ptpal_session_id');
@@ -637,7 +856,7 @@ waitForMediaPipe() {
                 sessionId: this.getSessionId()
             };
             
-            const response = await fetch('http://localhost:8001/api/pose-data', {
+            const response = await fetch('https://localhost:8001/api/pose-data', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -672,7 +891,7 @@ waitForMediaPipe() {
     async notifyNewSession(sessionId) {
         try {
             // Send notification to backend that new session started
-            await fetch('http://localhost:8001/api/new-session', {
+            await fetch('https://localhost:8001/api/new-session', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
