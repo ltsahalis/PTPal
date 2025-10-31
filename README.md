@@ -67,7 +67,7 @@ This single command starts both backend and frontend servers:
 
 You should see:
 ```
-Backend running on http://localhost:8001
+Backend running on https://localhost:8001
 Frontend running on https://localhost:3000
 ```
 
@@ -97,6 +97,8 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+# Generate SSL certificates for HTTPS
+bash generate_certificates.sh
 python3 app.py
 ```
 
@@ -116,9 +118,9 @@ Then open: **https://localhost:3000**
 ### Data Flow
 1. **Frontend** (`https://localhost:3000`): Captures webcam video and runs MediaPipe BlazePose
 2. **Out-of-Frame Detection**: Real-time border feedback (green=good, yellow=partially out, red=out of frame)
-3. **Backend** (`http://localhost:8001`): Receives pose data, calculates joint angles, stores in SQLite
+3. **Backend** (`https://localhost:8001`): Receives pose data, calculates joint angles, stores in SQLite
 4. **Database**: Stores raw landmarks and calculated angles with timestamps
-5. **Display** (`http://localhost:8001`): Shows live data from current session only
+5. **Display** (`https://localhost:8001`): Shows live data from current session only
 
 ### Session Management
 - **New Session**: Created when "Start Camera" is pressed
@@ -176,6 +178,7 @@ node https-server.js
 
 # If SSL certificate issues, regenerate certificates
 rm key.pem cert.pem
+rm backend/backend-*.pem
 ./setup.sh
 ```
 
@@ -193,7 +196,7 @@ sqlite3 ptpal_data.db "SELECT COUNT(*) FROM angle_data;"
 ## Viewing Your Data
 
 ### Live Display
-- Visit `http://localhost:8001` to see current session data
+- Visit `https://localhost:8001` to see current session data
 - Auto-refreshes every 3 seconds
 - Shows only active session (old sessions hidden)
 
@@ -218,7 +221,7 @@ SELECT * FROM angle_data WHERE session_id = 'your_session_id';
 ### Export Data
 ```bash
 # Via API (if backend running)
-curl "http://localhost:8001/api/export/your_session_id"
+curl -k "https://localhost:8001/api/export/your_session_id"
 
 # Direct database query
 sqlite3 ptpal_data.db "SELECT * FROM angle_data WHERE session_id = 'your_session_id';"
@@ -237,6 +240,6 @@ sqlite3 ptpal_data.db "SELECT * FROM angle_data WHERE session_id = 'your_session
 
 ## 📝 Port Information
 
-**Backend (HTTP)**: http://localhost:8001  
+**Backend (HTTPS)**: https://localhost:8001  
 **Frontend (HTTPS)**: https://localhost:3000  
 **Database**: `backend/ptpal_data.db`
