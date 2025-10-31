@@ -1,3 +1,324 @@
+// Tutorial System
+class TutorialSystem {
+    constructor() {
+        this.currentStep = 0;
+        this.highlightElement = null;
+        this.tutorialSteps = [
+            {
+                title: "Welcome to PTPal!",
+                description: "PTPal is your intelligent Physical Therapy Assistant. This tutorial will guide you through the key features of the app.",
+                element: null,
+                position: 'center'
+            },
+            {
+                title: "Camera Controls",
+                description: "Start by clicking the 'Start Camera' button to activate your webcam. Once started, you can stop it anytime with 'Stop Camera'. The camera will track your pose in real-time.",
+                element: '#start-btn',
+                position: 'bottom'
+            },
+            {
+                title: "Pose Type Selection",
+                description: "Select the type of exercise you want to practice from the dropdown menu. PTPal supports multiple exercises like Partial Squat, Heel Raises, Single Leg Stance, and more.",
+                element: '#pose-type-select',
+                position: 'bottom'
+            },
+            {
+                title: "Real-time Feedback",
+                description: "Click 'Start Real-time Feedback' to begin receiving instant feedback on your pose. The system will analyze your form and provide suggestions to improve your technique.",
+                element: '#start-feedback-btn',
+                position: 'bottom'
+            },
+            {
+                title: "Score and Status",
+                description: "Your performance is scored in real-time and displayed here. The score ranges from 0-100, and you'll see a PASS or FAIL indicator based on your pose quality.",
+                element: '.score-section',
+                position: 'top'
+            },
+            {
+                title: "Feedback Messages",
+                description: "Specific feedback messages appear here to help you improve your form. Pay attention to these suggestions to enhance your exercise technique.",
+                element: '.feedback-section',
+                position: 'top'
+            },
+            {
+                title: "Raw Pose Data",
+                description: "For developers and advanced users, you can view the raw pose estimation data here. This shows all the landmark coordinates detected by the system.",
+                element: '.pose-data-container',
+                position: 'top'
+            },
+            {
+                title: "You're All Set!",
+                description: "You're ready to start using PTPal! Remember to position yourself fully in the camera frame for best results. Happy exercising!",
+                element: null,
+                position: 'center'
+            }
+        ];
+        
+        this.initializeElements();
+        this.setupEventListeners();
+        this.checkFirstVisit();
+    }
+    
+    initializeElements() {
+        this.welcomeScreen = document.getElementById('welcome-screen');
+        this.tutorialOverlay = document.getElementById('tutorial-overlay');
+        this.tutorialTitle = document.getElementById('tutorial-title');
+        this.tutorialDescription = document.getElementById('tutorial-description');
+        this.tutorialProgress = document.getElementById('tutorial-progress');
+        this.prevBtn = document.getElementById('prev-tutorial-btn');
+        this.nextBtn = document.getElementById('next-tutorial-btn');
+        this.finishBtn = document.getElementById('finish-tutorial-btn');
+        this.closeBtn = document.getElementById('close-tutorial-btn');
+        this.startTutorialBtn = document.getElementById('start-tutorial-btn');
+        this.skipTutorialBtn = document.getElementById('skip-tutorial-btn');
+        this.restartTutorialBtn = document.getElementById('restart-tutorial-btn');
+        this.tutorialFooter = document.querySelector('.tutorial-footer');
+    }
+    
+    setupEventListeners() {
+        this.startTutorialBtn.addEventListener('click', () => {
+            this.hideWelcomeScreen();
+            this.startTutorial();
+        });
+        
+        this.skipTutorialBtn.addEventListener('click', () => {
+            this.skipTutorial();
+        });
+        
+        if (this.restartTutorialBtn) {
+            this.restartTutorialBtn.addEventListener('click', () => {
+                this.restartTutorial();
+            });
+        }
+        
+        this.prevBtn.addEventListener('click', () => this.prevStep());
+        this.nextBtn.addEventListener('click', () => this.nextStep());
+        this.finishBtn.addEventListener('click', () => this.finishTutorial());
+        this.closeBtn.addEventListener('click', () => this.finishTutorial());
+        
+        // Close tutorial on backdrop click
+        document.getElementById('tutorial-backdrop').addEventListener('click', (e) => {
+            if (e.target.id === 'tutorial-backdrop') {
+                this.finishTutorial();
+            }
+        });
+    }
+    
+    checkFirstVisit() {
+        const hasSeenTutorial = localStorage.getItem('ptpal_tutorial_seen');
+        if (!hasSeenTutorial) {
+            // Show welcome screen
+            this.welcomeScreen.classList.remove('hidden');
+        } else {
+            // Hide welcome screen immediately
+            this.welcomeScreen.classList.add('hidden');
+        }
+    }
+    
+    hideWelcomeScreen() {
+        this.welcomeScreen.classList.add('hidden');
+    }
+    
+    skipTutorial() {
+        localStorage.setItem('ptpal_tutorial_seen', 'true');
+        this.hideWelcomeScreen();
+    }
+    
+    startTutorial() {
+        this.currentStep = 0;
+        this.showTutorial();
+        this.updateTutorialStep();
+    }
+    
+    showTutorial() {
+        this.tutorialOverlay.style.display = 'block';
+        setTimeout(() => {
+            this.tutorialOverlay.classList.add('active');
+        }, 10);
+    }
+    
+    hideTutorial() {
+        this.tutorialOverlay.classList.remove('active');
+        setTimeout(() => {
+            this.tutorialOverlay.style.display = 'none';
+            this.removeHighlight();
+        }, 300);
+    }
+    
+    updateTutorialStep() {
+        const step = this.tutorialSteps[this.currentStep];
+        
+        // Update content
+        this.tutorialTitle.textContent = step.title;
+        this.tutorialDescription.textContent = step.description;
+        this.tutorialProgress.textContent = `${this.currentStep + 1} / ${this.tutorialSteps.length}`;
+        
+        // Update buttons
+        this.prevBtn.disabled = this.currentStep === 0;
+        
+        // Show finish button on last step
+        const isLastStep = this.currentStep === this.tutorialSteps.length - 1;
+        if (isLastStep) {
+            this.tutorialFooter.classList.add('show-finish');
+        } else {
+            this.tutorialFooter.classList.remove('show-finish');
+        }
+        
+        // Highlight element
+        if (step.element) {
+            const element = document.querySelector(step.element);
+            if (element) {
+                this.highlightElement(element, step.position);
+            } else {
+                this.removeHighlight();
+            }
+        } else {
+            this.removeHighlight();
+        }
+        
+        // Position popup
+        this.positionPopup(step.position, step.element);
+    }
+    
+    highlightElement(element, position) {
+        this.removeHighlight();
+        
+        // Scroll element into view first
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Wait a bit for scroll to complete, then highlight
+        setTimeout(() => {
+            const rect = element.getBoundingClientRect();
+            const highlight = document.createElement('div');
+            highlight.className = 'tutorial-highlight pulse';
+            highlight.style.position = 'fixed';
+            highlight.style.left = `${rect.left}px`;
+            highlight.style.top = `${rect.top}px`;
+            highlight.style.width = `${rect.width}px`;
+            highlight.style.height = `${rect.height}px`;
+            
+            document.body.appendChild(highlight);
+            this.highlightElement = highlight;
+            
+            // Update highlight position on scroll/resize
+            const updateHighlight = () => {
+                if (this.highlightElement && document.body.contains(highlight)) {
+                    const newRect = element.getBoundingClientRect();
+                    highlight.style.left = `${newRect.left}px`;
+                    highlight.style.top = `${newRect.top}px`;
+                    highlight.style.width = `${newRect.width}px`;
+                    highlight.style.height = `${newRect.height}px`;
+                }
+            };
+            
+            window.addEventListener('scroll', updateHighlight, true);
+            window.addEventListener('resize', updateHighlight);
+            
+            // Store cleanup function
+            highlight._cleanup = () => {
+                window.removeEventListener('scroll', updateHighlight, true);
+                window.removeEventListener('resize', updateHighlight);
+            };
+        }, 300);
+    }
+    
+    removeHighlight() {
+        if (this.highlightElement) {
+            // Clean up event listeners
+            if (this.highlightElement._cleanup) {
+                this.highlightElement._cleanup();
+            }
+            this.highlightElement.remove();
+            this.highlightElement = null;
+        }
+    }
+    
+    positionPopup(position, elementSelector) {
+        const popup = document.getElementById('tutorial-popup');
+        
+        if (position === 'center' || !elementSelector) {
+            popup.style.top = '50%';
+            popup.style.left = '50%';
+            popup.style.transform = 'translate(-50%, -50%)';
+            return;
+        }
+        
+        const element = document.querySelector(elementSelector);
+        if (!element) {
+            popup.style.top = '50%';
+            popup.style.left = '50%';
+            popup.style.transform = 'translate(-50%, -50%)';
+            return;
+        }
+        
+        // Use setTimeout to ensure popup is rendered before getting dimensions
+        setTimeout(() => {
+            const rect = element.getBoundingClientRect();
+            const popupRect = popup.getBoundingClientRect();
+            const spacing = 20;
+            
+            let top, left;
+            
+            switch (position) {
+                case 'top':
+                    top = rect.top - popupRect.height - spacing;
+                    left = rect.left + (rect.width / 2) - (popupRect.width / 2);
+                    break;
+                case 'bottom':
+                    top = rect.bottom + spacing;
+                    left = rect.left + (rect.width / 2) - (popupRect.width / 2);
+                    break;
+                case 'left':
+                    top = rect.top + (rect.height / 2) - (popupRect.height / 2);
+                    left = rect.left - popupRect.width - spacing;
+                    break;
+                case 'right':
+                    top = rect.top + (rect.height / 2) - (popupRect.height / 2);
+                    left = rect.right + spacing;
+                    break;
+                default:
+                    top = rect.bottom + spacing;
+                    left = rect.left + (rect.width / 2) - (popupRect.width / 2);
+            }
+            
+            // Ensure popup stays within viewport
+            const maxLeft = window.innerWidth - popupRect.width - 20;
+            const maxTop = window.innerHeight - popupRect.height - 20;
+            left = Math.max(20, Math.min(left, maxLeft));
+            top = Math.max(20, Math.min(top, maxTop));
+            
+            popup.style.top = `${top}px`;
+            popup.style.left = `${left}px`;
+            popup.style.transform = 'none';
+        }, 50);
+    }
+    
+    prevStep() {
+        if (this.currentStep > 0) {
+            this.currentStep--;
+            this.updateTutorialStep();
+        }
+    }
+    
+    nextStep() {
+        if (this.currentStep < this.tutorialSteps.length - 1) {
+            this.currentStep++;
+            this.updateTutorialStep();
+        }
+    }
+    
+    finishTutorial() {
+        localStorage.setItem('ptpal_tutorial_seen', 'true');
+        this.hideTutorial();
+    }
+    
+    restartTutorial() {
+        // Don't clear localStorage - just restart the tutorial
+        this.currentStep = 0;
+        this.startTutorial();
+    }
+}
+
 // Enhanced REST approach with polling for real-time feedback
 class RealTimeFeedbackREST {
     constructor() {
@@ -907,6 +1228,9 @@ waitForMediaPipe() {
 
 // Initialize the webcam manager when the page loads
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize tutorial system
+    const tutorialSystem = new TutorialSystem();
+    
     // Initialize immediately - waitForMediaPipe will handle script loading
     const webcamManager = new WebcamManager();
     
