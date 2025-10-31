@@ -43,6 +43,14 @@ echo ""
 echo "Step 2: Setting up Python backend..."
 cd backend
 
+# Generate backend SSL certificates if they don't exist
+echo "Generating backend SSL certificates..."
+if [ ! -f "backend-cert.pem" ] || [ ! -f "backend-key.pem" ]; then
+    bash generate_certificates.sh
+else
+    echo "Backend SSL certificates already exist"
+fi
+
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "Creating Python virtual environment..."
