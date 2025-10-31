@@ -27,6 +27,7 @@ header {
     text-align: center;
     margin-bottom: 30px;
     color: white;
+    position: relative;
 }
 
 header h1 {
@@ -42,6 +43,47 @@ header p {
     opacity: 0.9;
     color: #2D3748;
     font-weight: 500;
+}
+
+/* Restart Tutorial Button */
+.btn.tutorial-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #9F7AEA 0%, #B794F4 100%);
+    color: white;
+    border: 2px solid #9F7AEA;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(159, 122, 234, 0.3);
+    z-index: 100;
+}
+
+.btn.tutorial-btn:hover {
+    background: linear-gradient(135deg, #805AD5 0%, #9F7AEA 100%);
+    border-color: #805AD5;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(159, 122, 234, 0.4);
+}
+
+.btn.tutorial-btn:active {
+    transform: translateY(0);
+}
+
+.tutorial-icon {
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.tutorial-text {
+    white-space: nowrap;
 }
 
 /* Logo container */
@@ -337,6 +379,20 @@ footer {
         font-size: 2rem;
     }
     
+    .btn.tutorial-btn {
+        position: static;
+        margin: 15px auto 0;
+        display: inline-flex;
+    }
+    
+    .btn.tutorial-btn .tutorial-text {
+        display: none;
+    }
+    
+    .btn.tutorial-btn .tutorial-icon {
+        font-size: 1.3rem;
+    }
+    
     .webcam-container {
         padding: 15px;
     }
@@ -622,5 +678,289 @@ footer {
     
     #score-value {
         font-size: 1.6rem;
+    }
+}
+
+/* Welcome Screen Styles */
+.welcome-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #B8E6B8 0%, #B3D9FF 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: fadeIn 0.5s ease-in;
+}
+
+.welcome-screen.hidden {
+    display: none;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.welcome-content {
+    text-align: center;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 50px 40px;
+    border-radius: 25px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    max-width: 500px;
+    width: 90%;
+    animation: slideUp 0.5s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.welcome-logo {
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 30px;
+    position: relative;
+}
+
+.welcome-logo .logo-figure {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform: scale(1.5);
+}
+
+.welcome-content h1 {
+    font-size: 2.5rem;
+    color: #4A90E2;
+    margin-bottom: 15px;
+    font-weight: 700;
+}
+
+.welcome-content > p {
+    font-size: 1.2rem;
+    color: #4A5568;
+    margin-bottom: 40px;
+    font-weight: 500;
+}
+
+.welcome-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Tutorial Overlay Styles */
+.tutorial-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.tutorial-overlay.active {
+    pointer-events: all;
+}
+
+.tutorial-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.tutorial-overlay.active .tutorial-backdrop {
+    opacity: 1;
+}
+
+.tutorial-popup {
+    position: absolute;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 450px;
+    width: 90%;
+    z-index: 10001;
+    opacity: 0;
+    transform: scale(0.9);
+    transition: all 0.3s ease;
+}
+
+.tutorial-overlay.active .tutorial-popup {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.tutorial-highlight {
+    position: absolute;
+    border-radius: 10px;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7),
+                0 0 0 4px #4A90E2,
+                0 0 20px rgba(74, 144, 226, 0.5);
+    z-index: 10000;
+    pointer-events: none;
+    transition: all 0.3s ease;
+}
+
+.tutorial-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 25px;
+    border-bottom: 2px solid #E2E8F0;
+}
+
+.tutorial-progress {
+    font-size: 0.9rem;
+    color: #4A5568;
+    font-weight: 600;
+    background: #F7FAFC;
+    padding: 5px 15px;
+    border-radius: 15px;
+}
+
+.close-tutorial {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: #A0AEC0;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.close-tutorial:hover {
+    background: #F7FAFC;
+    color: #4A5568;
+}
+
+.tutorial-content {
+    padding: 30px 25px;
+}
+
+.tutorial-content h2 {
+    font-size: 1.5rem;
+    color: #4A90E2;
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+.tutorial-content p {
+    font-size: 1rem;
+    color: #4A5568;
+    line-height: 1.6;
+}
+
+.tutorial-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    padding: 20px 25px;
+    border-top: 2px solid #E2E8F0;
+}
+
+.tutorial-footer .btn {
+    flex: 1;
+    min-width: 100px;
+}
+
+.tutorial-footer #finish-tutorial-btn {
+    display: none;
+}
+
+.tutorial-footer.show-finish #next-tutorial-btn {
+    display: none;
+}
+
+.tutorial-footer.show-finish #finish-tutorial-btn {
+    display: block;
+    flex: 1;
+}
+
+/* Highlight animation for tutorial steps */
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7),
+                    0 0 0 4px #4A90E2,
+                    0 0 20px rgba(74, 144, 226, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7),
+                    0 0 0 6px #4A90E2,
+                    0 0 30px rgba(74, 144, 226, 0.7);
+    }
+}
+
+.tutorial-highlight.pulse {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+/* Responsive design for welcome and tutorial */
+@media (max-width: 768px) {
+    .welcome-content {
+        padding: 40px 30px;
+    }
+    
+    .welcome-content h1 {
+        font-size: 2rem;
+    }
+    
+    .welcome-content > p {
+        font-size: 1rem;
+    }
+    
+    .welcome-buttons {
+        flex-direction: column;
+    }
+    
+    .welcome-buttons .btn {
+        width: 100%;
+    }
+    
+    .tutorial-popup {
+        max-width: 90%;
+    }
+    
+    .tutorial-content {
+        padding: 25px 20px;
+    }
+    
+    .tutorial-footer {
+        flex-direction: column;
+    }
+    
+    .tutorial-footer .btn {
+        width: 100%;
     }
 }
