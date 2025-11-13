@@ -471,10 +471,12 @@ if __name__ == "__main__":
     for k, m in sample.items():
         res = evaluate_pose(k, m)
         print(f"{res.pose}: score={res.score}, pass={res.pass_fail}, reasons={res.reasons}")
-        response = client.responses.create(
-        model="gpt-4.1",
-        input= build_llm_messages(res),
-        store=True,
-)
-
-
+        if client:
+            response = client.responses.create(
+                model="gpt-4.1",
+                input=build_llm_messages(res),
+                store=True,
+            )
+            print("LLM feedback:", response)
+        else:
+            print("No OpenAI client configured; skipping LLM feedback.")

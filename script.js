@@ -707,7 +707,6 @@ waitForMediaPipe() {
         
         // Store the latest pose data - EXACT BlazePose format
         this.lastPoseData = results;
-        this.pose.onResults((r) => { console.log('results', r); this.onPoseResults(r); });
 
         // Update feedback system with latest pose data
         this.feedbackSystem.setLastPoseData(results);
