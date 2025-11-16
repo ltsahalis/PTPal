@@ -224,11 +224,15 @@ def receive_pose_data():
         print(f"Error processing pose data: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# Exercise-specific metric extraction functions
-def extract_partial_squat_metrics(landmarks):
-    """Extract only the metrics needed for partial squat validation."""
+def compute_pose_metrics(pose_type, landmarks):
+    """
+    Compute all required metrics for a specific pose type from landmarks.
+    Returns a dictionary of metrics needed for validation.
+    """
     if not landmarks or len(landmarks) < 33:
         return {}
+    
+    metrics = {}
     
     try:
         # Landmark indices
@@ -237,15 +241,20 @@ def extract_partial_squat_metrics(landmarks):
         LEFT_KNEE, RIGHT_KNEE = 25, 26
         LEFT_ANKLE, RIGHT_ANKLE = 27, 28
         LEFT_HEEL, RIGHT_HEEL = 29, 30
+        LEFT_TOE, RIGHT_TOE = 31, 32
+        LEFT_WRIST, RIGHT_WRIST = 15, 16
         
-        metrics = {}
+        # === Common calculations ===
         
         # Knee flexion angle (hip-knee-ankle)
         knee_left_angle = calculate_angle(landmarks[LEFT_KNEE], landmarks[LEFT_HIP], landmarks[LEFT_ANKLE])
         knee_right_angle = calculate_angle(landmarks[RIGHT_KNEE], landmarks[RIGHT_HIP], landmarks[RIGHT_ANKLE])
         metrics['knee_flexion_deg'] = (knee_left_angle + knee_right_angle) / 2
+        metrics['knee_flexion_left_deg'] = knee_left_angle
+        metrics['knee_flexion_right_deg'] = knee_right_angle
         
         # Hip-knee-ankle alignment (frontal plane - knee valgus/varus)
+        # Measure horizontal deviation of knee from hip-ankle line
         left_knee_x_deviation = abs(landmarks[LEFT_KNEE]['x'] - landmarks[LEFT_HIP]['x']) * 100
         right_knee_x_deviation = abs(landmarks[RIGHT_KNEE]['x'] - landmarks[RIGHT_HIP]['x']) * 100
         metrics['hip_knee_ankle_alignment_deg'] = (left_knee_x_deviation + right_knee_x_deviation) / 2
@@ -264,216 +273,86 @@ def extract_partial_squat_metrics(landmarks):
         trunk_lean_rad = math.atan2(abs(mid_shoulder_x - mid_hip_x), abs(mid_shoulder_y - mid_hip_y))
         metrics['trunk_forward_lean_deg'] = math.degrees(trunk_lean_rad)
         
-        return metrics
-        
-    except Exception as e:
-        print(f"Error extracting partial squat metrics: {e}")
-        return {}
-
-def extract_heel_raises_metrics(landmarks):
-    """Extract only the metrics needed for heel raises validation."""
-    if not landmarks or len(landmarks) < 33:
-        return {}
-    
-    try:
-        # Landmark indices
-        LEFT_ANKLE, RIGHT_ANKLE = 27, 28
-        LEFT_HEEL, RIGHT_HEEL = 29, 30
-        
-        metrics = {}
-        
-        # Heel height (vertical distance from ankle to heel)
-        left_heel_height = abs(landmarks[LEFT_HEEL]['y'] - landmarks[LEFT_ANKLE]['y']) * 170  # Approx cm
-        right_heel_height = abs(landmarks[RIGHT_HEEL]['y'] - landmarks[RIGHT_ANKLE]['y']) * 170
-        metrics['heel_height_cm'] = (left_heel_height + right_heel_height) / 2
-        
-        # Bilateral symmetry (heel height difference)
-        if left_heel_height > 0 or right_heel_height > 0:
-            max_height = max(left_heel_height, right_heel_height)
-            if max_height > 0:
-                metrics['symmetry_diff_pct'] = abs(left_heel_height - right_heel_height) / max_height * 100
+        # Bilateral symmetry
+        if metrics['knee_flexion_left_deg'] > 0 or metrics['knee_flexion_right_deg'] > 0:
+            max_knee = max(metrics['knee_flexion_left_deg'], metrics['knee_flexion_right_deg'])
+            if max_knee > 0:
+                metrics['symmetry_diff_pct'] = abs(metrics['knee_flexion_left_deg'] - metrics['knee_flexion_right_deg']) / max_knee * 100
             else:
                 metrics['symmetry_diff_pct'] = 0
         else:
-            metrics['symmetry_diff_pct'] = 0
+            # For heel raises, use heel height for symmetry
+            if left_heel_height > 0 or right_heel_height > 0:
+                max_height = max(left_heel_height, right_heel_height)
+                if max_height > 0:
+                    metrics['symmetry_diff_pct'] = abs(left_heel_height - right_heel_height) / max_height * 100
+                else:
+                    metrics['symmetry_diff_pct'] = 0
+            else:
+                metrics['symmetry_diff_pct'] = 0
+        
+        # Pelvic drop/obliquity (hip height difference)
+        hip_height_diff = abs(landmarks[LEFT_HIP]['y'] - landmarks[RIGHT_HIP]['y'])
+        metrics['pelvic_drop_deg'] = hip_height_diff * 100  # Convert to approximate degrees
         
         # Ankle roll (simplified - would need 3D for accurate measurement)
         metrics['ankle_roll_deg'] = 0  # Placeholder - needs world landmarks
         
-        return metrics
+        # === Pose-specific calculations ===
         
-    except Exception as e:
-        print(f"Error extracting heel raises metrics: {e}")
-        return {}
-
-def extract_single_leg_stance_metrics(landmarks):
-    """Extract only the metrics needed for single leg stance validation."""
-    if not landmarks or len(landmarks) < 33:
-        return {}
-    
-    try:
-        # Landmark indices
-        LEFT_HIP, RIGHT_HIP = 23, 24
+        if pose_type == 'partial_squat':
+            # Already have: knee_flexion_deg, hip_knee_ankle_alignment_deg, heel_height_cm, trunk_forward_lean_deg
+            pass
         
-        metrics = {}
+        elif pose_type == 'heel_raises':
+            # Already have: heel_height_cm, symmetry_diff_pct, ankle_roll_deg
+            pass
         
-        # Hold time and sway need temporal data - set defaults
-        metrics['hold_time_s'] = 0  # Must be tracked over time
-        metrics['sway_peak_deg'] = 0  # Must be tracked over time
+        elif pose_type in ['single_leg_stance', 'tree_pose']:
+            # Hold time and sway need temporal data - set defaults
+            metrics['hold_time_s'] = 0  # Must be tracked over time
+            metrics['sway_peak_deg'] = 0  # Must be tracked over time
+            
+            # Arm overhead alignment (for tree pose)
+            if pose_type == 'tree_pose':
+                if landmarks[LEFT_WRIST]['y'] < landmarks[LEFT_SHOULDER]['y'] and landmarks[RIGHT_WRIST]['y'] < landmarks[RIGHT_SHOULDER]['y']:
+                    wrist_height_diff = abs(landmarks[LEFT_WRIST]['y'] - landmarks[RIGHT_WRIST]['y'])
+                    metrics['arm_overhead_alignment_deg'] = wrist_height_diff * 100
+                else:
+                    metrics['arm_overhead_alignment_deg'] = 20  # Arms not raised
         
-        # Pelvic drop/obliquity (hip height difference)
-        hip_height_diff = abs(landmarks[LEFT_HIP]['y'] - landmarks[RIGHT_HIP]['y'])
-        metrics['pelvic_drop_deg'] = hip_height_diff * 100  # Convert to approximate degrees
+        elif pose_type == 'tandem_stance':
+            # Foot line deviation (heel-to-toe alignment)
+            # Check if feet are in line (front foot heel close to back foot toe)
+            front_heel_x = landmarks[LEFT_HEEL]['x']  # Assume left is front
+            back_toe_x = landmarks[RIGHT_TOE]['x']
+            foot_deviation = abs(front_heel_x - back_toe_x) * 100
+            metrics['foot_line_deviation_deg'] = foot_deviation
+            metrics['hold_time_s'] = 0  # Must be tracked over time
         
-        return metrics
-        
-    except Exception as e:
-        print(f"Error extracting single leg stance metrics: {e}")
-        return {}
-
-def extract_tandem_stance_metrics(landmarks):
-    """Extract only the metrics needed for tandem stance validation."""
-    if not landmarks or len(landmarks) < 33:
-        return {}
-    
-    try:
-        # Landmark indices
-        LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
-        LEFT_HIP, RIGHT_HIP = 23, 24
-        LEFT_HEEL, RIGHT_HEEL = 29, 30
-        LEFT_TOE, RIGHT_TOE = 31, 32
-        
-        metrics = {}
-        
-        # Foot line deviation (heel-to-toe alignment)
-        # Check if feet are in line (front foot heel close to back foot toe)
-        front_heel_x = landmarks[LEFT_HEEL]['x']  # Assume left is front
-        back_toe_x = landmarks[RIGHT_TOE]['x']
-        foot_deviation = abs(front_heel_x - back_toe_x) * 100
-        metrics['foot_line_deviation_deg'] = foot_deviation
-        
-        # Trunk forward lean (angle from vertical)
-        mid_shoulder_x = (landmarks[LEFT_SHOULDER]['x'] + landmarks[RIGHT_SHOULDER]['x']) / 2
-        mid_shoulder_y = (landmarks[LEFT_SHOULDER]['y'] + landmarks[RIGHT_SHOULDER]['y']) / 2
-        mid_hip_x = (landmarks[LEFT_HIP]['x'] + landmarks[RIGHT_HIP]['x']) / 2
-        mid_hip_y = (landmarks[LEFT_HIP]['y'] + landmarks[RIGHT_HIP]['y']) / 2
-        
-        trunk_lean_rad = math.atan2(abs(mid_shoulder_x - mid_hip_x), abs(mid_shoulder_y - mid_hip_y))
-        metrics['trunk_forward_lean_deg'] = math.degrees(trunk_lean_rad)
-        
-        metrics['hold_time_s'] = 0  # Must be tracked over time
+        elif pose_type == 'functional_reach':
+            # Reach distance ratio (forward reach distance / arm length)
+            # Estimate arm length
+            arm_length = math.sqrt(
+                (landmarks[LEFT_SHOULDER]['x'] - landmarks[LEFT_WRIST]['x'])**2 +
+                (landmarks[LEFT_SHOULDER]['y'] - landmarks[LEFT_WRIST]['y'])**2
+            )
+            
+            # Forward reach approximation (how far forward the wrist is from shoulder)
+            reach_forward = abs(landmarks[LEFT_WRIST]['x'] - landmarks[LEFT_SHOULDER]['x'])
+            
+            if arm_length > 0:
+                metrics['reach_distance_ratio'] = reach_forward / arm_length
+            else:
+                metrics['reach_distance_ratio'] = 0
+            
+            metrics['stepped_during_task'] = 0.0  # Must be tracked over time
         
         return metrics
         
     except Exception as e:
-        print(f"Error extracting tandem stance metrics: {e}")
+        print(f"Error computing pose metrics: {e}")
         return {}
-
-def extract_functional_reach_metrics(landmarks):
-    """Extract only the metrics needed for functional reach validation."""
-    if not landmarks or len(landmarks) < 33:
-        return {}
-    
-    try:
-        # Landmark indices
-        LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
-        LEFT_HIP, RIGHT_HIP = 23, 24
-        LEFT_WRIST, RIGHT_WRIST = 15, 16
-        
-        metrics = {}
-        
-        # Reach distance ratio (forward reach distance / arm length)
-        # Estimate arm length
-        arm_length = math.sqrt(
-            (landmarks[LEFT_SHOULDER]['x'] - landmarks[LEFT_WRIST]['x'])**2 +
-            (landmarks[LEFT_SHOULDER]['y'] - landmarks[LEFT_WRIST]['y'])**2
-        )
-        
-        # Forward reach approximation (how far forward the wrist is from shoulder)
-        reach_forward = abs(landmarks[LEFT_WRIST]['x'] - landmarks[LEFT_SHOULDER]['x'])
-        
-        if arm_length > 0:
-            metrics['reach_distance_ratio'] = reach_forward / arm_length
-        else:
-            metrics['reach_distance_ratio'] = 0
-        
-        # Trunk forward lean (angle from vertical)
-        mid_shoulder_x = (landmarks[LEFT_SHOULDER]['x'] + landmarks[RIGHT_SHOULDER]['x']) / 2
-        mid_shoulder_y = (landmarks[LEFT_SHOULDER]['y'] + landmarks[RIGHT_SHOULDER]['y']) / 2
-        mid_hip_x = (landmarks[LEFT_HIP]['x'] + landmarks[RIGHT_HIP]['x']) / 2
-        mid_hip_y = (landmarks[LEFT_HIP]['y'] + landmarks[RIGHT_HIP]['y']) / 2
-        
-        trunk_lean_rad = math.atan2(abs(mid_shoulder_x - mid_hip_x), abs(mid_shoulder_y - mid_hip_y))
-        metrics['trunk_forward_lean_deg'] = math.degrees(trunk_lean_rad)
-        
-        metrics['stepped_during_task'] = 0.0  # Must be tracked over time
-        
-        return metrics
-        
-    except Exception as e:
-        print(f"Error extracting functional reach metrics: {e}")
-        return {}
-
-def extract_tree_pose_metrics(landmarks):
-    """Extract only the metrics needed for tree pose validation."""
-    if not landmarks or len(landmarks) < 33:
-        return {}
-    
-    try:
-        # Landmark indices
-        LEFT_HIP, RIGHT_HIP = 23, 24
-        LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
-        LEFT_WRIST, RIGHT_WRIST = 15, 16
-        
-        metrics = {}
-        
-        # Hold time and sway need temporal data - set defaults
-        metrics['hold_time_s'] = 0  # Must be tracked over time
-        metrics['sway_peak_deg'] = 0  # Must be tracked over time
-        
-        # Pelvic drop/obliquity (hip height difference)
-        hip_height_diff = abs(landmarks[LEFT_HIP]['y'] - landmarks[RIGHT_HIP]['y'])
-        metrics['pelvic_drop_deg'] = hip_height_diff * 100  # Convert to approximate degrees
-        
-        # Arm overhead alignment (for tree pose)
-        if landmarks[LEFT_WRIST]['y'] < landmarks[LEFT_SHOULDER]['y'] and landmarks[RIGHT_WRIST]['y'] < landmarks[RIGHT_SHOULDER]['y']:
-            wrist_height_diff = abs(landmarks[LEFT_WRIST]['y'] - landmarks[RIGHT_WRIST]['y'])
-            metrics['arm_overhead_alignment_deg'] = wrist_height_diff * 100
-        else:
-            metrics['arm_overhead_alignment_deg'] = 20  # Arms not raised
-        
-        return metrics
-        
-    except Exception as e:
-        print(f"Error extracting tree pose metrics: {e}")
-        return {}
-
-# Exercise-specific metric extraction dispatcher
-EXERCISE_METRIC_EXTRACTORS = {
-    'partial_squat': extract_partial_squat_metrics,
-    'heel_raises': extract_heel_raises_metrics,
-    'single_leg_stance': extract_single_leg_stance_metrics,
-    'tandem_stance': extract_tandem_stance_metrics,
-    'functional_reach': extract_functional_reach_metrics,
-    'tree_pose': extract_tree_pose_metrics,
-}
-
-def compute_pose_metrics(pose_type, landmarks):
-    """
-    Compute only the required metrics for a specific pose type from landmarks.
-    Returns a dictionary of metrics needed for validation.
-    """
-    if not landmarks or len(landmarks) < 33:
-        return {}
-    
-    # Use exercise-specific extractor if available
-    if pose_type in EXERCISE_METRIC_EXTRACTORS:
-        return EXERCISE_METRIC_EXTRACTORS[pose_type](landmarks)
-    
-    # Fallback to old method for unknown exercises
-    print(f"Warning: No specific extractor for {pose_type}, using fallback")
-    return {}
-
 @app.route('/api/validate-pose', methods=['POST'])
 def validate_pose_endpoint():
     """Validate pose quality and return detailed feedback"""
@@ -811,4 +690,13 @@ if __name__ == '__main__':
     init_database()
     print("Starting PTPal Backend...")
     print("Backend will receive pose data for processing and storage")
-    app.run(debug=True, host='localhost', port=8001)
+    print("Running on HTTPS: https://localhost:8001")
+    print("Note: You will see a security warning. Click 'Advanced' and 'Proceed to localhost'")
+    
+    # Run with HTTPS using SSL certificates
+    app.run(
+        debug=True, 
+        host='localhost', 
+        port=8001,
+        ssl_context=('backend-cert.pem', 'backend-key.pem')
+    )

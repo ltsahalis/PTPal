@@ -1,5 +1,7 @@
-# PTPal - Backend Breakdown 
-## Please read through all of this to understad how the system works
+# PTPal - Physical Therapy Pal
+## Real-time Pose Detection with Data Storage & Frame Tracking
+
+Please read through all of this to understand how the system works.
 
 
 ## Backend Data Structure
@@ -9,92 +11,116 @@ PTPal/
 ├── backend/                # Python Flask backend
 │   ├── app.py              # Main backend application
 │   ├── requirements.txt    # Python dependencies
-│   ├── setup.sh           # Setup script
 │   ├── view_data.py       # Data viewing utility
 │   └── ptpal_data.db      # SQLite database (created automatically)
+├── setup.sh                # One-time setup script (⭐ RUN THIS FIRST)
+├── start.sh                # Launch script (starts everything)
+├── https-server.js         # Node.js HTTPS server (required for camera)
 ├── index.html              # Frontend web interface
-├── script.js               # Frontend JavaScript
+├── script.js               # Frontend JavaScript (pose detection + data storage)
 ├── styles.css              # Frontend styling
-└── http-server.js          # Node.js HTTP server
+├── INSTALLATION.md         # Detailed installation guide
+└── README.md               # This file
 ```
 
-##  Quick Start
+## Features
+
+- **Out-of-Frame Detection**: Real-time visual feedback when you move out of frame
+- **Data Storage**: All pose data saved to SQLite database with session tracking
+- **BlazePose Integration**: High-accuracy pose estimation using MediaPipe
+- **Angle Calculation**: Automatic joint angle computation and storage
+- **Session Management**: Track multiple exercise sessions separately
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
 - **Python 3.7+** installed on your system
 - **Node.js** installed (for frontend server)
-- **Git** for accessing the repository
+- **OpenSSL** (usually pre-installed on macOS/Linux)
 
-### 1. Clone the Repository and Switch to Data Storage Branch
-
-**⚠️ Important**: Make sure you're on the `data_storage` branch, NOT `main`. All backend functionality is currently in this branch.
-
-### 2. Backend Setup
+### 1. Clone the Repository
 
 ```bash
-# Navigate to backend directory
-cd backend
+git clone <repository-url>
+cd PTPal_Demo
+```
 
-# Make setup script executable
+### 2. Run One-Time Setup
+
+This will generate SSL certificates, create virtual environment, and install all dependencies:
+
+```bash
 chmod +x setup.sh
-
-# Run the setup script
 ./setup.sh
 ```
 
-**Alternative Manual Setup:**
+### 3. Start PTPal
+
+This single command starts both backend and frontend servers:
+
 ```bash
-cd backend
-
-# Create virtual environment
-python3 -m venv venv
-
-# Activate virtual environment
-source venv/bin/activate  # On macOS/Linux
-# OR
-venv\Scripts\activate     # On Windows
-
-# Install dependencies
-pip install -r requirements.txt
+./start.sh
 ```
 
-### 3. Start the Backend Server
+You should see:
+```
+Backend running on https://localhost:8001
+Frontend running on https://localhost:3000
+```
 
+### 4. Open in Browser
+
+1. Navigate to: **https://localhost:3000**
+2. You'll see a security warning (normal for self-signed certificates)
+3. Click **"Advanced"** → **"Proceed to localhost (unsafe)"**
+4. Grant camera permissions when prompted
+5. Click **"Start Camera"** to begin
+
+### 5. Stop PTPal
+
+Press **Ctrl+C** in the terminal where `start.sh` is running.
+
+---
+
+## 📖 Manual Setup (Alternative)
+
+If you prefer to run components separately, see [INSTALLATION.md](INSTALLATION.md) for detailed instructions.
+
+**Quick version:**
+
+**Terminal 1 - Backend:**
 ```bash
-# Make sure you're in the backend directory
 cd backend
-
-# Activate virtual environment (if not already active)
+python3 -m venv venv
 source venv/bin/activate
-
-# Start the Flask backend
+pip install -r requirements.txt
+# Generate SSL certificates for HTTPS
+bash generate_certificates.sh
 python3 app.py
 ```
 
-The backend will start on `http://localhost:8001`
-
-### 4. Start the Frontend Server
-
-In a **new terminal window**:
-
+**Terminal 2 - Frontend:**
 ```bash
-# Navigate to project root
-cd PTPal
+# Generate SSL certificates (one-time)
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
 
-# Start the HTTP server
-node http-server.js
+# Start HTTPS server
+node https-server.js
 ```
 
-The frontend will be available at `http://localhost:3000`
+Then open: **https://localhost:3000**
 
 ## How It Works
 
 ### Data Flow
-1. **Frontend** (`localhost:3000`): Captures webcam video and runs MediaPipe BlazePose
-2. **Backend** (`localhost:8001`): Receives pose data, calculates joint angles, stores in SQLite
-3. **Database**: Stores raw landmarks and calculated angles with timestamps
-4. **Display** (`localhost:8001`): Shows live data from current session only
+1. **Frontend** (`https://localhost:3000`): Captures webcam video and runs MediaPipe BlazePose
+2. **Out-of-Frame Detection**: Real-time border feedback (green=good, yellow=partially out, red=out of frame)
+3. **Backend** (`https://localhost:8001`): Receives pose data, calculates joint angles, stores in SQLite
+4. **Database**: Stores raw landmarks and calculated angles with timestamps
+5. **Display** (`https://localhost:8001`): Shows live data from current session only
 
 ### Session Management
 - **New Session**: Created when "Start Camera" is pressed
@@ -213,8 +239,13 @@ pip list | grep flask
 # Check if port 3000 is in use
 lsof -i :3000
 
-# Restart HTTP server
-node http-server.js
+# Restart HTTPS server
+node https-server.js
+
+# If SSL certificate issues, regenerate certificates
+rm key.pem cert.pem
+rm backend/backend-*.pem
+./setup.sh
 ```
 
 ### Database Issues
@@ -231,7 +262,7 @@ sqlite3 ptpal_data.db "SELECT COUNT(*) FROM angle_data;"
 ## Viewing Your Data
 
 ### Live Display
-- Visit `http://localhost:8001` to see current session data
+- Visit `https://localhost:8001` to see current session data
 - Auto-refreshes every 3 seconds
 - Shows only active session (old sessions hidden)
 
@@ -256,7 +287,7 @@ SELECT * FROM angle_data WHERE session_id = 'your_session_id';
 ### Export Data
 ```bash
 # Via API (if backend running)
-curl "http://localhost:8001/api/export/your_session_id"
+curl -k "https://localhost:8001/api/export/your_session_id"
 
 # Direct database query
 sqlite3 ptpal_data.db "SELECT * FROM angle_data WHERE session_id = 'your_session_id';"
@@ -269,10 +300,12 @@ sqlite3 ptpal_data.db "SELECT * FROM angle_data WHERE session_id = 'your_session
 - Historical sessions can be accessed via API or database
 - System handles timezone conversion automatically
 - Backend must be running for data collection to work
+- Out-of-frame detection provides real-time visual feedback
 
 ---
 
-**Branch**: `data_storage` (not `main`)  
-**Backend Port**: 8001  
-**Frontend Port**: 3000  
+## 📝 Port Information
+
+**Backend (HTTPS)**: https://localhost:8001  
+**Frontend (HTTPS)**: https://localhost:3000  
 **Database**: `backend/ptpal_data.db`

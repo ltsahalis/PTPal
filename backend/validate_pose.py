@@ -66,6 +66,7 @@ class Thresholds:
 
     # Functional Reach
     fr_min_reach_ratio: float = 0.7  # ~70% of arm length as conservative floor
+    fr_min_trunk_flexion_deg: float = 10.0
     fr_max_trunk_flexion_deg: float = 30.0
 
     # Tree Pose
@@ -121,7 +122,7 @@ def validate_partial_squat(metrics: Dict[str, float], th: Thresholds = Threshold
                         f"Keep heels down: heel lift {metrics['heel_height_cm']:.1f} cm > {th.squat_max_heel_lift_cm:.1f} cm.", reasons)
     fails += _bool_fail(metrics["trunk_forward_lean_deg"] > th.squat_max_forward_lean_deg,
                         f"Upright chest: trunk lean {metrics['trunk_forward_lean_deg']:.0f}° > {th.squat_max_forward_lean_deg:.0f}°.", reasons)
-
+    
     score = _score_from_flags(checks, fails)
     return PoseResult(
         pose="Partial Squat",
@@ -242,14 +243,16 @@ def validate_functional_reach(metrics: Dict[str, float], th: Thresholds = Thresh
 
     reasons: List[str] = []
     fails = 0
-    checks = 3
+    checks = 4
 
     fails += _bool_fail(metrics["reach_distance_ratio"] < th.fr_min_reach_ratio,
                         f"Reach further: ratio {metrics['reach_distance_ratio']:.2f} < {th.fr_min_reach_ratio:.2f}.", reasons)
-    fails += _bool_fail(metrics["trunk_forward_lean_deg"] > th.fr_max_trunk_flexion_deg,
-                        f"Reach with arms, not trunk: flexion {metrics['trunk_forward_lean_deg']:.0f}° > {th.fr_max_trunk_flexion_deg:.0f}°.", reasons)
     fails += _bool_fail(metrics["stepped_during_task"] >= 0.5,
                         "Keep feet planted: stepping detected.", reasons)
+    fails += _bool_fail(metrics["trunk_forward_lean_deg"] < th.fr_min_trunk_flexion_deg,
+                        f"Lean forward slightly: trunk flexion {metrics['trunk_forward_lean_deg']:.0f}° < {th.fr_min_trunk_flexion_deg:.0f}°.", reasons)
+    fails += _bool_fail(metrics["trunk_forward_lean_deg"] > th.fr_max_trunk_flexion_deg,
+                        f"Reach with arms, not trunk: flexion {metrics['trunk_forward_lean_deg']:.0f}° > {th.fr_max_trunk_flexion_deg:.0f}°.", reasons)
 
     score = _score_from_flags(checks, fails)
     return PoseResult(
@@ -478,5 +481,3 @@ if __name__ == "__main__":
                 print(f"LLM Error: {e}")
         else:
             print("LLM client not available (no API key)")
-
-

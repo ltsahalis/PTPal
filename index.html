@@ -7,6 +7,45 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Welcome/Onboarding Screen -->
+    <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-content">
+            <div class="welcome-logo">
+                <div class="logo-figure">
+                    <div class="figure-head"></div>
+                    <div class="figure-body-green"></div>
+                    <div class="figure-body-blue"></div>
+                </div>
+            </div>
+            <h1>Welcome to PTPal</h1>
+            <p>Your intelligent Physical Therapy Assistant</p>
+            <div class="welcome-buttons">
+                <button id="start-tutorial-btn" class="btn primary">Start Tutorial</button>
+                <button id="skip-tutorial-btn" class="btn secondary">Skip</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tutorial Overlay -->
+    <div id="tutorial-overlay" class="tutorial-overlay" style="display: none;">
+        <div id="tutorial-backdrop" class="tutorial-backdrop"></div>
+        <div id="tutorial-popup" class="tutorial-popup">
+            <div class="tutorial-header">
+                <span class="tutorial-progress" id="tutorial-progress">1 / 6</span>
+                <button id="close-tutorial-btn" class="close-tutorial">×</button>
+            </div>
+            <div class="tutorial-content">
+                <h2 id="tutorial-title">Welcome to PTPal!</h2>
+                <p id="tutorial-description">Let's get started with a quick tour of the app.</p>
+            </div>
+            <div class="tutorial-footer">
+                <button id="prev-tutorial-btn" class="btn secondary" disabled>Previous</button>
+                <button id="next-tutorial-btn" class="btn primary">Next</button>
+                <button id="finish-tutorial-btn" class="btn primary" style="display: none;">Finish</button>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <header>
             <div class="logo-container">
@@ -20,6 +59,10 @@
                 <h1>PTPal Demo</h1>
             </div>
             <p>Physical Therapy Assistant - Demo</p>
+            <button id="restart-tutorial-btn" class="btn tutorial-btn" title="Restart Tutorial">
+                <span class="tutorial-icon">📚</span>
+                <span class="tutorial-text">Restart Tutorial</span>
+            </button>
         </header>
         
         <main>
@@ -34,6 +77,49 @@
             <div class="controls">
                 <button id="start-btn" class="btn primary">Start Camera</button>
                 <button id="stop-btn" class="btn secondary" disabled>Stop Camera</button>
+            </div>
+            
+            <div class="feedback-container">
+                <h3>Pose Validation & Feedback</h3>
+                <div class="pose-selector">
+                    <label for="pose-type-select">Select Pose Type:</label>
+                    <select id="pose-type-select">
+                        <option value="partial_squat">Partial Squat</option>
+                        <option value="heel_raises">Heel Raises</option>
+                        <option value="single_leg_stance">Single Leg Stance</option>
+                        <option value="tandem_stance">Tandem Stance</option>
+                        <option value="functional_reach">Functional Reach</option>
+                        <option value="tree_pose">Tree Pose</option>
+                    </select>
+                    <button id="start-feedback-btn" class="btn tertiary" disabled>Start Real-time Feedback</button>
+                    <button id="stop-feedback-btn" class="btn tertiary" disabled>Stop Feedback</button>
+                </div>
+                
+                <div class="feedback-display">
+                    <div class="score-section">
+                        <div class="score-circle">
+                            <span id="score-value">--</span>
+                            <span class="score-label">Score</span>
+                        </div>
+                        <div class="pass-indicator">
+                            <span id="pass-status">--</span>
+                        </div>
+                    </div>
+                    
+                    <div class="feedback-section">
+                        <h4>Real-time Feedback:</h4>
+                        <ul id="feedback-list">
+                            <li>Select a pose type and start feedback to begin</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="metrics-section">
+                        <h4>Current Metrics:</h4>
+                        <div id="metrics-display">
+                            <p>No metrics available yet</p>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div class="pose-data-container">
