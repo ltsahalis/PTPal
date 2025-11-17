@@ -125,3 +125,4 @@ venv.bak/
 *.db
 *.sqlite
 *.sqlite3
+backend/ptpal_data.db
