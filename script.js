@@ -544,18 +544,16 @@ class WebcamManager {
         
         // Out-of-frame detection variables
         this.lostFrames = 0;
-        this.recentCenters = [];
-        this.sideCounts = { left: 0, right: 0, top: 0, bottom: 0 };
         this.isOutOfFrame = false;
         this.isPartiallyOut = false;
         this.webcamContainer = document.querySelector('.webcam-container');
         
-        // Detection parameters (adapted from Python script)
-        this.EDGE_MARGIN = 60;        // outer guide box
-        this.SAFE_MARGIN = 80;       // inner safe zone
-        this.PARTIAL_FRAMES = 2;     // delay to prevent flickering
-        this.VIS_THRESH = 0.85;      // visibility threshold
-        this.LOST_FRAMES_LIMIT = 10; // frames before declaring out of frame
+        // Detection parameters
+        this.LOST_FRAMES_LIMIT = 10;      // frames before declaring out of frame
+        this.FRAME_MARGIN = 0.05;         // 5% margin from edges (for partial detection)
+        this.CENTER_TOLERANCE = 0.15;     // 15% tolerance from center (for centering check)
+        this.MIN_VISIBILITY = 0.5;         // minimum visibility for landmarks to be considered
+        this.MIN_KEY_LANDMARKS = 8;        // minimum key landmarks needed for "full body"
         
         this.initializeEventListeners();
         this.initializePose();
@@ -934,8 +932,6 @@ waitForMediaPipe() {
         
         // Reset frame detection state
         this.lostFrames = 0;
-        this.recentCenters = [];
-        this.sideCounts = { left: 0, right: 0, top: 0, bottom: 0 };
         this.isOutOfFrame = false;
         this.isPartiallyOut = false;
         
@@ -1003,147 +999,166 @@ waitForMediaPipe() {
         this.updateButtons(false);
     }
     
-    // Out-of-frame detection methods
+    // Out-of-frame detection methods - rewritten from scratch
     checkOutOfFrame(landmarks) {
-        this.lostFrames = 0; // Reset lost frames since we have a pose
+        // Reset lost frames since we have a pose
+        this.lostFrames = 0;
         
-        // Calculate bounding box from pose landmarks
-        const bounds = this.calculatePoseBounds(landmarks);
-        if (!bounds) return;
+        // Check key body landmarks for full body detection
+        const keyLandmarks = this.getKeyBodyLandmarks(landmarks);
         
-        const { x, y, width, height, centerX, centerY } = bounds;
-        const canvasWidth = this.canvas.width;
-        const canvasHeight = this.canvas.height;
-        
-        // Store recent center for tracking
-        this.recentCenters.push({ x: centerX, y: centerY });
-        if (this.recentCenters.length > 15) {
-            this.recentCenters.shift();
-        }
-        
-        // Check if pose is partially out of safe zone
-        const sidesCrossed = this.checkSidesCrossed(x, y, width, height, canvasWidth, canvasHeight);
-        
-        // Update side counts with smoothing - reset if no sides crossed
-        if (sidesCrossed.length === 0) {
-            // If no sides crossed, reset all counts
-            for (const side of ['left', 'right', 'top', 'bottom']) {
-                this.sideCounts[side] = 0;
-            }
-        } else {
-            // If sides are crossed, increment those sides
-            for (const side of sidesCrossed) {
-                this.sideCounts[side] += 2;
-            }
-            // Decrement non-crossed sides
-            for (const side of ['left', 'right', 'top', 'bottom']) {
-                if (!sidesCrossed.includes(side)) {
-                    this.sideCounts[side] = Math.max(0, this.sideCounts[side] - 1);
-                }
-            }
-        }
-        
-        // Check if any side has been crossed for enough frames
-        this.isPartiallyOut = false;
-        for (const side of ['left', 'right', 'top', 'bottom']) {
-            if (this.sideCounts[side] >= this.PARTIAL_FRAMES * 2) {
-                this.isPartiallyOut = true;
-                break;
-            }
-        }
-        
-        // Check visibility ratio
-        const visibilityRatio = this.calculateVisibilityRatio(x, y, width, height, canvasWidth, canvasHeight);
-        console.log('Visibility ratio:', visibilityRatio, 'Threshold:', this.VIS_THRESH);
-        
-        if (visibilityRatio < this.VIS_THRESH) {
+        if (keyLandmarks.visibleCount < this.MIN_KEY_LANDMARKS) {
+            // Not enough key landmarks visible - partially out
             this.isPartiallyOut = true;
-            console.log('Partially out due to low visibility ratio');
+            this.isOutOfFrame = false;
+            this.updateFrameStatus();
+            return;
         }
         
-        // Log final status before update
-        console.log('Final frame status:', {
-            isPartiallyOut: this.isPartiallyOut,
-            sidesCrossed: sidesCrossed,
-            sideCounts: this.sideCounts,
-            visibilityRatio: visibilityRatio
-        });
+        // Check if body is fully within frame
+        const frameStatus = this.checkBodyInFrame(keyLandmarks);
         
-        this.isOutOfFrame = false;
+        // Check if body is centered
+        const isCentered = this.checkBodyCentered(keyLandmarks);
+        
+        // Determine status:
+        // GREEN: Full body in frame AND centered
+        // ORANGE: Partially out OR not centered
+        // RED: Handled by handleNoPoseDetected (no pose at all)
+        
+        if (frameStatus.isFullyInFrame && isCentered) {
+            // GREEN - Full body in frame and centered
+            this.isOutOfFrame = false;
+            this.isPartiallyOut = false;
+        } else {
+            // ORANGE - Partially out or not centered
+            this.isOutOfFrame = false;
+            this.isPartiallyOut = true;
+        }
+        
         this.updateFrameStatus();
     }
     
-    calculatePoseBounds(landmarks) {
-        if (!landmarks || landmarks.length === 0) return null;
+    getKeyBodyLandmarks(landmarks) {
+        // Key landmarks for full body detection (BlazePose indices)
+        const keyIndices = {
+            head: 0,           // nose
+            leftShoulder: 11,
+            rightShoulder: 12,
+            leftHip: 23,
+            rightHip: 24,
+            leftKnee: 25,
+            rightKnee: 26,
+            leftAnkle: 27,
+            rightAnkle: 28
+        };
         
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let validLandmarks = 0;
+        const keyPoints = {};
+        let visibleCount = 0;
         
-        landmarks.forEach(landmark => {
-            if (landmark.visibility > 0.5) { // Only consider visible landmarks
-                const x = landmark.x * this.canvas.width;
-                const y = landmark.y * this.canvas.height;
-                
-                minX = Math.min(minX, x);
-                minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x);
-                maxY = Math.max(maxY, y);
-                validLandmarks++;
+        for (const [name, index] of Object.entries(keyIndices)) {
+            if (landmarks[index] && landmarks[index].visibility >= this.MIN_VISIBILITY) {
+                keyPoints[name] = {
+                    x: landmarks[index].x,
+                    y: landmarks[index].y,
+                    visibility: landmarks[index].visibility
+                };
+                visibleCount++;
             }
-        });
-        
-        if (validLandmarks < 5) return null; // Need at least 5 visible landmarks
+        }
         
         return {
-            x: minX,
-            y: minY,
-            width: maxX - minX,
-            height: maxY - minY,
-            centerX: (minX + maxX) / 2,
-            centerY: (minY + maxY) / 2
+            points: keyPoints,
+            visibleCount: visibleCount
         };
     }
     
-    checkSidesCrossed(x, y, width, height, canvasWidth, canvasHeight) {
-        const sides = [];
+    checkBodyInFrame(keyLandmarks) {
+        const canvasWidth = this.canvas.width;
+        const canvasHeight = this.canvas.height;
+        const margin = this.FRAME_MARGIN; // 5% margin
         
-        // Debug the bottom check specifically
-        const bottomCheck = y + height > canvasHeight - this.SAFE_MARGIN;
-        console.log('Bottom check debug:', {
-            y: y,
-            height: height,
-            yPlusHeight: y + height,
-            canvasHeight: canvasHeight,
-            safeMargin: this.SAFE_MARGIN,
-            threshold: canvasHeight - this.SAFE_MARGIN,
-            bottomCrossed: bottomCheck
-        });
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let hasPoints = false;
         
-        if (x < this.SAFE_MARGIN) sides.push('left');
-        if (x + width > canvasWidth - this.SAFE_MARGIN) sides.push('right');
-        if (y < this.SAFE_MARGIN) sides.push('top');
-        if (bottomCheck) sides.push('bottom');
+        // Find bounding box of visible key points
+        for (const point of Object.values(keyLandmarks.points)) {
+            const x = point.x * canvasWidth;
+            const y = point.y * canvasHeight;
+            
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+            hasPoints = true;
+        }
         
-        return sides;
+        if (!hasPoints) {
+            return { isFullyInFrame: false, isPartiallyInFrame: false };
+        }
+        
+        // Check if any part is outside frame (with margin)
+        const leftMargin = canvasWidth * margin;
+        const rightMargin = canvasWidth * (1 - margin);
+        const topMargin = canvasHeight * margin;
+        const bottomMargin = canvasHeight * (1 - margin);
+        
+        const isFullyInFrame = 
+            minX >= leftMargin &&
+            maxX <= rightMargin &&
+            minY >= topMargin &&
+            maxY <= bottomMargin;
+        
+        // Check if any part is completely outside frame
+        const isPartiallyInFrame = 
+            maxX > 0 && minX < canvasWidth &&
+            maxY > 0 && minY < canvasHeight;
+        
+        return { isFullyInFrame, isPartiallyInFrame };
     }
     
-    calculateVisibilityRatio(x, y, width, height, canvasWidth, canvasHeight) {
-        const clampedX = Math.max(0, x);
-        const clampedY = Math.max(0, y);
-        const clampedWidth = Math.min(canvasWidth, x + width) - clampedX;
-        const clampedHeight = Math.min(canvasHeight, y + height) - clampedY;
+    checkBodyCentered(keyLandmarks) {
+        const canvasWidth = this.canvas.width;
+        const canvasHeight = this.canvas.height;
+        const tolerance = this.CENTER_TOLERANCE; // 15% tolerance
         
-        const visibleArea = Math.max(0, clampedWidth) * Math.max(0, clampedHeight);
-        const totalArea = width * height;
+        // Calculate center of body (average of visible key points)
+        let sumX = 0, sumY = 0, count = 0;
         
-        return totalArea > 0 ? visibleArea / totalArea : 0;
+        for (const point of Object.values(keyLandmarks.points)) {
+            sumX += point.x * canvasWidth;
+            sumY += point.y * canvasHeight;
+            count++;
+        }
+        
+        if (count === 0) return false;
+        
+        const bodyCenterX = sumX / count;
+        const bodyCenterY = sumY / count;
+        
+        // Frame center
+        const frameCenterX = canvasWidth / 2;
+        const frameCenterY = canvasHeight / 2;
+        
+        // Calculate distance from frame center (normalized)
+        const distX = Math.abs(bodyCenterX - frameCenterX) / canvasWidth;
+        const distY = Math.abs(bodyCenterY - frameCenterY) / canvasHeight;
+        
+        // Check if within tolerance
+        const isCentered = distX <= tolerance && distY <= tolerance;
+        
+        return isCentered;
     }
     
     handleNoPoseDetected() {
+        this.lostFrames++;
+        
         if (this.lostFrames >= this.LOST_FRAMES_LIMIT) {
+            // RED - No pose detected for enough frames
             this.isOutOfFrame = true;
             this.isPartiallyOut = false;
         }
+        
         this.updateFrameStatus();
     }
     
