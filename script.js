@@ -999,7 +999,7 @@ waitForMediaPipe() {
         this.updateButtons(false);
     }
     
-    // Out-of-frame detection methods - rewritten from scratch
+    // Out-of-frame detection methods
     checkOutOfFrame(landmarks) {
         // Reset lost frames since we have a pose
         this.lostFrames = 0;
