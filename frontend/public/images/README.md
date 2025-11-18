@@ -12,3 +12,4 @@ The image should ideally be:
 - At least 500x500 pixels (will be resized automatically)
 - Clear and bright (the overlay will add a slight tint)
 
+
