@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up / Log In - PT Pal</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Lustria:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <a href="/">
+                    <img src="/images/Screenshot_2025-11-16_at_6.08.36_PM-removebg-preview.png" alt="PT Pal Logo" class="logo-icon">
+                    <span class="logo-text">PT Pal</span>
+                </a>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link">Home</a></li>
+                <li><a href="/exercises" class="nav-link">Exercises</a></li>
+                <li><a href="/about" class="nav-link">About</a></li>
+                <li><a href="/contact" class="nav-link">Contact</a></li>
+            </ul>
+            <div class="nav-buttons">
+                <button class="nav-login" onclick="window.location.href='/auth.html'">Log in</button>
+                <button class="nav-cta" onclick="window.location.href='/auth.html'">Get Started</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Auth Section -->
+    <section class="auth-section">
+        <div class="auth-container">
+            <div class="auth-card">
+                <div class="auth-header">
+                    <h1>Welcome to PT Pal!</h1>
+                    <p>Join us and start your physical therapy journey</p>
+                </div>
+
+                <div class="auth-tabs">
+                    <button class="auth-tab active" data-tab="signup">Sign Up</button>
+                    <button class="auth-tab" data-tab="login">Log In</button>
+                </div>
+
+                <!-- Sign Up Form -->
+                <form id="signup-form" class="auth-form active">
+                    <div class="form-group">
+                        <label for="signup-name">Full Name</label>
+                        <input type="text" id="signup-name" name="name" required placeholder="Enter your full name">
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-email">Email</label>
+                        <input type="email" id="signup-email" name="email" required placeholder="Enter your email">
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-password">Password</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="signup-password" name="password" required placeholder="Create a password">
+                            <button type="button" class="password-toggle" onclick="togglePassword('signup-password', this)">
+                                <img src="/images/Screenshot_2025-11-18_at_1.26.43_PM-removebg-preview.png" alt="Show password" class="eye-icon-image eye-open" style="width: 1.25rem; height: 1.25rem; object-fit: contain;">
+                                <img src="/images/Screenshot_2025-11-18_at_1.25.38_PM-removebg-preview.png" alt="Hide password" class="eye-icon-image eye-closed" style="display: none; width: 1.25rem; height: 1.25rem; object-fit: contain;">
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-age">Age</label>
+                        <input type="number" id="signup-age" name="age" required placeholder="Enter your age" min="1" max="120">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-large">Create Account</button>
+                </form>
+
+                <!-- Log In Form -->
+                <form id="login-form" class="auth-form">
+                    <div class="error-message" id="login-error" style="display: none;"></div>
+                    <div class="form-group">
+                        <label for="login-email">Email</label>
+                        <input type="email" id="login-email" name="email" required placeholder="Enter your email">
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="login-password" name="password" required placeholder="Enter your password">
+                            <button type="button" class="password-toggle" onclick="togglePassword('login-password', this)">
+                                <img src="/images/Screenshot_2025-11-18_at_1.26.43_PM-removebg-preview.png" alt="Show password" class="eye-icon-image eye-open" style="width: 1.25rem; height: 1.25rem; object-fit: contain;">
+                                <img src="/images/Screenshot_2025-11-18_at_1.25.38_PM-removebg-preview.png" alt="Hide password" class="eye-icon-image eye-closed" style="display: none; width: 1.25rem; height: 1.25rem; object-fit: contain;">
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-large">Log In</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Password toggle function
+        function togglePassword(inputId, button) {
+            const input = document.getElementById(inputId);
+            const eyeOpen = button.querySelector('.eye-open');
+            const eyeClosed = button.querySelector('.eye-closed');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                eyeOpen.style.display = 'none';
+                eyeClosed.style.display = 'block';
+            } else {
+                input.type = 'password';
+                eyeOpen.style.display = 'block';
+                eyeClosed.style.display = 'none';
+            }
+        }
+
+        // Tab switching
+        const tabs = document.querySelectorAll('.auth-tab');
+        const forms = document.querySelectorAll('.auth-form');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.getAttribute('data-tab');
+                
+                // Remove active class from all tabs and forms
+                tabs.forEach(t => t.classList.remove('active'));
+                forms.forEach(f => f.classList.remove('active'));
+                
+                // Hide error messages when switching tabs
+                const errorMessage = document.getElementById('login-error');
+                if (errorMessage) {
+                    errorMessage.style.display = 'none';
+                }
+                
+                // Add active class to clicked tab and corresponding form
+                tab.classList.add('active');
+                document.getElementById(`${targetTab}-form`).classList.add('active');
+            });
+        });
+
+        // Form submission
+        document.getElementById('signup-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const formData = {
+                name: document.getElementById('signup-name').value,
+                email: document.getElementById('signup-email').value,
+                password: document.getElementById('signup-password').value,
+                age: document.getElementById('signup-age').value
+            };
+            
+            // Store user data in localStorage (for demo purposes)
+            localStorage.setItem('user', JSON.stringify(formData));
+            
+            // Redirect to account page
+            window.location.href = '/account.html';
+        });
+
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            const errorMessage = document.getElementById('login-error');
+            
+            // Check for demo user (Jane Doe) - always available without signup
+            const isDemoUser = email.toLowerCase() === 'janedoe@gmail.com' && password === 'helloworld';
+            
+            if (isDemoUser) {
+                // Create demo user data and store it
+                const demoUser = {
+                    name: 'Jane Doe',
+                    email: 'janedoe@gmail.com',
+                    password: 'helloworld',
+                    age: 25
+                };
+                localStorage.setItem('user', JSON.stringify(demoUser));
+                
+                // Hide error message if it was showing
+                errorMessage.style.display = 'none';
+                // Redirect to account page
+                window.location.href = '/account.html';
+                return;
+            }
+            
+            // Check if user exists in localStorage (for other users)
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            
+            // Case-insensitive email comparison
+            if (user.email && user.email.toLowerCase() === email.toLowerCase() && user.password === password) {
+                // Hide error message if it was showing
+                errorMessage.style.display = 'none';
+                // Redirect to account page
+                window.location.href = '/account.html';
+            } else {
+                // Show error message
+                errorMessage.textContent = 'Invalid email or password. Please try again or sign up.';
+                errorMessage.style.display = 'block';
+            }
+        });
+
+        // Clear error message when user starts typing
+        document.getElementById('login-email').addEventListener('input', () => {
+            const errorMessage = document.getElementById('login-error');
+            if (errorMessage) {
+                errorMessage.style.display = 'none';
+            }
+        });
+
+        document.getElementById('login-password').addEventListener('input', () => {
+            const errorMessage = document.getElementById('login-error');
+            if (errorMessage) {
+                errorMessage.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
+

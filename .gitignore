@@ -1,3 +1,38 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+backend/venv/
+.venv/
+
+# Databases
+*.db
+
+# SSL certificates and keys
+*.pem
+*.crt
+*.key
+
+# Node/JavaScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Coverage / reports
+htmlcov/
+.coverage
+.pytest_cache/
 # Operating System Files
 .DS_Store
 .DS_Store?
@@ -84,3 +119,12 @@ venv.bak/
 *.pkl
 *.h5
 *.model
+
+# SSL Certificates (self-signed, generated during setup)
+*.pem
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+backend/ptpal_data.db
