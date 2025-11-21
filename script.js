@@ -1257,13 +1257,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Home button - redirect to account if logged in, otherwise to homepage
     const homeBtn = document.getElementById('home-btn');
     if (homeBtn) {
-        homeBtn.addEventListener('click', () => {
+        homeBtn.addEventListener('click', (event) => {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
             if (user.email) {
+                event.preventDefault();
                 window.location.href = '/account';
-            } else {
-                window.location.href = '/';
             }
+            // If no user, allow the anchor's default navigation to '/'
         });
     }
 });

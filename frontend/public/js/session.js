@@ -1242,16 +1242,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Home button - redirect to account if logged in, otherwise to homepage
     const homeBtn = document.getElementById('home-btn');
     if (homeBtn) {
-        homeBtn.addEventListener('click', () => {
-            // Check if user is logged in
+        homeBtn.addEventListener('click', (event) => {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
             if (user.email) {
-                // User is logged in, go to account page
+                event.preventDefault();
                 window.location.href = '/account';
-            } else {
-                // Not logged in, go to homepage
-                window.location.href = '/';
             }
+            // Otherwise let the anchor follow its default href to '/'
         });
     }
 });
