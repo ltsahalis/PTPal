@@ -7,45 +7,6 @@
     <link rel="stylesheet" href="/css/session.css">
 </head>
 <body>
-    <!-- Welcome/Onboarding Screen -->
-    <div id="welcome-screen" class="welcome-screen">
-        <div class="welcome-content">
-            <div class="welcome-logo">
-                <div class="logo-figure">
-                    <div class="figure-head"></div>
-                    <div class="figure-body-green"></div>
-                    <div class="figure-body-blue"></div>
-                </div>
-            </div>
-            <h1>Welcome to PTPal</h1>
-            <p>Your intelligent Physical Therapy Assistant</p>
-            <div class="welcome-buttons">
-                <button id="start-tutorial-btn" class="btn primary">Start Tutorial</button>
-                <button id="skip-tutorial-btn" class="btn secondary">Skip</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Tutorial Overlay -->
-    <div id="tutorial-overlay" class="tutorial-overlay" style="display: none;">
-        <div id="tutorial-backdrop" class="tutorial-backdrop"></div>
-        <div id="tutorial-popup" class="tutorial-popup">
-            <div class="tutorial-header">
-                <span class="tutorial-progress" id="tutorial-progress">1 / 6</span>
-                <button id="close-tutorial-btn" class="close-tutorial">×</button>
-            </div>
-            <div class="tutorial-content">
-                <h2 id="tutorial-title">Welcome to PTPal!</h2>
-                <p id="tutorial-description">Let's get started with a quick tour of the app.</p>
-            </div>
-            <div class="tutorial-footer">
-                <button id="prev-tutorial-btn" class="btn secondary" disabled>Previous</button>
-                <button id="next-tutorial-btn" class="btn primary">Next</button>
-                <button id="finish-tutorial-btn" class="btn primary" style="display: none;">Finish</button>
-            </div>
-        </div>
-    </div>
-
     <div class="container">
         <header>
             <div class="logo-container">
@@ -131,6 +92,14 @@
             <button class="onboarding-close" id="close-onboarding">×</button>
             <div class="onboarding-slides">
                 <div class="onboarding-slide active">
+                    <img src="/images/Screenshot_2025-11-16_at_6.08.36_PM-removebg-preview.png" alt="PT Pal Logo" class="slide-logo">
+                    <h2>Welcome to PTPal!</h2>
+                    <div class="slide-instructions">
+                        <p>Your intelligent Physical Therapy Assistant</p>
+                        <p>This tutorial will guide you through the key features.</p>
+                    </div>
+                </div>
+                <div class="onboarding-slide">
                     <div class="slide-icon">📹</div>
                     <h2>Camera Access</h2>
                     <div class="slide-instructions">
@@ -157,6 +126,22 @@
                     </div>
                 </div>
                 <div class="onboarding-slide">
+                    <h2>Score and Status</h2>
+                    <div class="slide-instructions">
+                        <p>Your performance is scored in real-time (0-100)</p>
+                        <p>You'll see a <strong>PASS</strong> or <strong>FAIL</strong> indicator</p>
+                        <p>Based on your pose quality and form</p>
+                    </div>
+                </div>
+                <div class="onboarding-slide">
+                    <h2>Raw Pose Data</h2>
+                    <div class="slide-instructions">
+                        <p>For advanced users, view raw pose estimation data</p>
+                        <p>Shows all landmark coordinates detected by the system</p>
+                        <p>Helps understand how the AI tracks your movements</p>
+                    </div>
+                </div>
+                <div class="onboarding-slide">
                     <h2>Ready to Start!</h2>
                     <div class="slide-instructions">
                         <p><strong>You're all set!</strong></p>
@@ -171,6 +156,9 @@
                     <span class="indicator" data-slide="1"></span>
                     <span class="indicator" data-slide="2"></span>
                     <span class="indicator" data-slide="3"></span>
+                    <span class="indicator" data-slide="4"></span>
+                    <span class="indicator" data-slide="5"></span>
+                    <span class="indicator" data-slide="6"></span>
                 </div>
                 <button class="nav-arrow" id="next-slide">→</button>
             </div>
@@ -315,6 +303,19 @@
             
             // Initialize
             updateSlide();
+            
+            // Handle restart tutorial button
+            const restartTutorialBtn = document.getElementById('restart-tutorial-btn');
+            if (restartTutorialBtn) {
+                restartTutorialBtn.addEventListener('click', () => {
+                    currentSlide = 0;
+                    updateSlide();
+                    onboardingModal.style.display = 'flex';
+                    setTimeout(() => {
+                        onboardingModal.classList.add('active');
+                    }, 50);
+                });
+            }
         });
     </script>
 </body>

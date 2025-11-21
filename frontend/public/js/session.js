@@ -1779,9 +1779,6 @@ class GuidedSessionModal {
 
 // Initialize the webcam manager when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize tutorial system
-    const tutorialSystem = new TutorialSystem();
-    
     // Initialize immediately - waitForMediaPipe will handle script loading
     const webcamManager = new WebcamManager();
     const guidedSession = new GuidedSessionModal(webcamManager);
