@@ -55,16 +55,27 @@
                 <div class="brand-mark">
                     <span>PT</span>
                 </div>
-                <div class="brand-copy">
+                <div class="brand-copy" id="header-title-area">
                     <p class="eyebrow">PTPal Physical Therapy Assistant</p>
                     <h1>Guided Balance Session</h1>
                     <p class="subline">Real-time pose validation with actionable coaching</p>
+                </div>
+                <div class="brand-copy feedback-header-area" id="header-feedback-area" style="display: none;">
+                    <!-- LLM feedback will be injected here -->
                 </div>
             </div>
             <div class="session-header-meta">
                 <div class="meta-card">
                     <span class="meta-label">Status</span>
                     <span class="meta-value accent" id="session-state-label">Standing by</span>
+                </div>
+                <div class="meta-card timer-card">
+                    <span class="meta-label">Time Left</span>
+                    <span class="meta-value timer-value" id="header-timer">00:30</span>
+                </div>
+                <div class="header-actions">
+                    <button id="floating-pause-btn" class="btn secondary">Pause</button>
+                    <button id="floating-stop-btn" class="btn ghost">Stop</button>
                 </div>
             </div>
         </header>
@@ -79,14 +90,13 @@
                                     <p class="floating-label">Current Exercise</p>
                                     <p id="floating-exercise-name" class="floating-exercise-name">Partial Squat</p>
                                 </div>
-                                <div class="floating-timer">
-                                    <span class="timer-label">Time Left</span>
-                                    <span id="floating-timer">00:30</span>
+                                <div class="floating-score">
+                                    <span class="score-label-small">Score</span>
+                                    <div class="score-display-floating">
+                                        <span id="score-value">--</span>
+                                        <span id="pass-status" class="pass-indicator-badge">--</span>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="floating-actions">
-                                <button id="floating-pause-btn" class="btn secondary">Pause</button>
-                                <button id="floating-stop-btn" class="btn ghost">Stop</button>
                             </div>
                         </div>
                     </div>
@@ -94,27 +104,16 @@
                     <video id="webcam" autoplay playsinline></video>
                     <canvas id="output-canvas"></canvas>
 
-                    <div class="feedback-container hud-card">
-                        <h3>Pose Validation & Feedback</h3>
-                        <div class="feedback-display">
-                            <div class="score-section">
-                                <div class="score-circle">
-                                    <span id="score-value">--</span>
-                                    <span class="score-label">Score</span>
-                                </div>
-                                <div class="pass-indicator">
-                                    <span id="pass-status">--</span>
-                                </div>
-                            </div>
-                            
-                            <div class="feedback-section">
-                                <h4>Tips</h4>
-                                <ul id="feedback-list">
-                                    <li>Select a pose type and start feedback to begin</li>
-                                </ul>
-                            </div>
+                    <!-- Countdown Overlay -->
+                    <div id="countdown-overlay" class="countdown-overlay hidden">
+                        <div class="countdown-content">
+                            <p class="countdown-label">Get Ready!</p>
+                            <div class="countdown-number" id="countdown-number">3</div>
+                            <p class="countdown-instruction">Position yourself in frame</p>
                         </div>
                     </div>
+
+                    <!-- Feedback now displays in header area -->
                 </div>
             </div>
         </main>
@@ -167,8 +166,8 @@
                 <div class="onboarding-slide">
                     <h2>Score and Status</h2>
                     <div class="slide-instructions">
-                        <p>Your performance is scored in real-time (0-100)</p>
-                        <p>You'll see a <strong>PASS</strong> or <strong>FAIL</strong> indicator</p>
+                        <p>Your performance is rated with 1-5 stars ⭐</p>
+                        <p>Look at the top right for your <strong>Score</strong> and <strong>PASS/FAIL</strong> status</p>
                         <p>Based on your pose quality and form</p>
                     </div>
                 </div>

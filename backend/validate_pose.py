@@ -465,10 +465,12 @@ LLM_OUTPUT_SCHEMA = {
 
 LLM_SYSTEM_PROMPT = (
     "You are PT Pal, a physical-therapy coaching assistant for kids age 5-9. "
-    "Speak in short, encouraging sentences. Use only the metrics and reasons provided. "
+    "CRITICAL: Keep ALL messages extremely brief - MAXIMUM 3-5 WORDS EACH. "
+    "Use only the metrics and reasons provided. "
     "Do not make diagnoses or medical claims. Do not invent new measurements. "
     "Return a STRICT JSON object that matches the provided JSON Schema exactly. "
-    "Limit to at most 3 concrete cues. Each cue must include a plain-language ACTION."
+    "Limit to at most 3 concrete cues. Each cue must include a plain-language ACTION. "
+    "Examples: 'Bend knees more', 'Keep heels down', 'Stand taller', 'Great job!'"
 )
 
 LLM_USER_TEMPLATE = (
@@ -520,8 +522,8 @@ def get_llm_feedback(result: PoseResult, tone: str = "coach", reading_level: str
         response = client.chat.completions.create(
             model="gpt-4o",  # gpt-4o supports JSON mode
             messages=messages,
-            temperature=0.7,
-            max_tokens=500,
+            temperature=0.5,  # Lower temperature for more consistent, concise responses
+            max_tokens=150,  # Reduced to encourage brevity (3-5 words per message)
             response_format={"type": "json_object"}  # Ensures JSON output
         )
         

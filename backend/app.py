@@ -523,7 +523,7 @@ def validate_pose_endpoint():
             "feedback": result.reasons,
             "metrics": result.metrics,
             "all_computed_metrics": metrics,  # Show all computed values
-            "llm_feedback": llm_feedback  # AI-enhanced feedback (None if not configured)
+            "llm_feedback": llm_feedback,  # AI-enhanced feedback (None if not configured)
             "session_id": session_id,
             "timestamp": timestamp
         })

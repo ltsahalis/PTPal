@@ -30,7 +30,7 @@ class TutorialSystem {
             },
             {
                 title: "Score and Status",
-                description: "Your performance is scored in real-time and displayed here. The score ranges from 0-100, and you'll see a PASS or FAIL indicator based on your pose quality.",
+                description: "Your performance is rated in real-time with a 1-5 star system displayed here. You'll also see a PASS or FAIL indicator based on your pose quality.",
                 element: '.score-section',
                 position: 'top'
             },
@@ -344,8 +344,8 @@ class RealTimeFeedbackREST {
         this.stopFeedbackBtn = document.getElementById('stop-feedback-btn');
         this.scoreValue = document.getElementById('score-value');
         this.passStatus = document.getElementById('pass-status');
-        this.feedbackList = document.getElementById('feedback-list');
-        this.metricsDisplay = document.getElementById('metrics-display');
+        this.headerTitleArea = document.getElementById('header-title-area');
+        this.headerFeedbackArea = document.getElementById('header-feedback-area');
         
         this.initializeEventListeners();
     }
@@ -479,17 +479,28 @@ class RealTimeFeedbackREST {
     }
     
     displayFeedback(feedback) {
-        // Update score
-        this.scoreValue.textContent = feedback.score || '--';
+        // Update score with star rating (1-5 scale)
+        if (feedback.score) {
+            const stars = '★'.repeat(feedback.score) + '☆'.repeat(5 - feedback.score);
+            this.scoreValue.textContent = stars;
+        } else {
+            this.scoreValue.textContent = '--';
+        }
         
         // Update pass/fail status
         this.updatePassStatus(feedback.pass);
         
-        // Update feedback list
-        this.updateFeedbackList(feedback.feedback || []);
+        // Display LLM feedback in Tips section if available, otherwise show basic feedback
+        console.log('Feedback received:', feedback);
+        console.log('LLM Feedback:', feedback.llm_feedback);
         
-        // Update metrics display
-        this.updateMetricsDisplay(feedback.metrics || {});
+        if (feedback.llm_feedback) {
+            console.log('Displaying LLM feedback');
+            this.updateLLMFeedbackDisplay(feedback.llm_feedback);
+        } else {
+            console.log('No LLM feedback, showing basic feedback');
+            this.updateFeedbackList(feedback.feedback || []);
+        }
         
         // Add visual feedback based on score
         this.updateScoreIndicator(feedback.score);
@@ -497,7 +508,7 @@ class RealTimeFeedbackREST {
     
     updatePassStatus(pass) {
         this.passStatus.textContent = pass ? 'PASS' : 'FAIL';
-        this.passStatus.className = 'pass-indicator ' + (pass ? 'pass' : 'fail');
+        this.passStatus.className = 'pass-indicator-badge ' + (pass ? 'pass' : 'fail');
     }
     
     updateFeedbackList(feedbackArray) {
@@ -527,33 +538,67 @@ class RealTimeFeedbackREST {
         this.metricsDisplay.innerHTML = metricsHtml;
     }
     
-    updateScoreIndicator(score) {
-        const scoreCircle = document.querySelector('.score-circle');
-        if (!scoreCircle) return;
+    updateLLMFeedbackDisplay(llmFeedback) {
+        if (!this.headerFeedbackArea || !this.headerTitleArea) return;
         
-        // Update color based on score
-        if (score >= 80) {
-            scoreCircle.style.background = 'linear-gradient(135deg, #48BB78, #38A169)'; // Green
-        } else if (score >= 60) {
-            scoreCircle.style.background = 'linear-gradient(135deg, #ED8936, #DD6B20)'; // Orange
-        } else {
-            scoreCircle.style.background = 'linear-gradient(135deg, #F56565, #E53E3E)'; // Red
+        if (!llmFeedback) {
+            // Show title, hide feedback
+            this.headerTitleArea.style.display = 'block';
+            this.headerFeedbackArea.style.display = 'none';
+            return;
         }
+        
+        // Hide title, show feedback
+        this.headerTitleArea.style.display = 'none';
+        this.headerFeedbackArea.style.display = 'block';
+        
+        let html = '';
+        
+        // Summary - keep it super short
+        if (llmFeedback.summary) {
+            html += `<p class="feedback-summary">💬 ${llmFeedback.summary}</p>`;
+        }
+        
+        // Cues (actionable feedback) - simplified, inline
+        if (llmFeedback.cues && llmFeedback.cues.length > 0) {
+            html += '<div class="feedback-cues">';
+            llmFeedback.cues.forEach(cue => {
+                html += `<span class="feedback-cue">👉 ${cue.action}</span>`;
+            });
+            html += '</div>';
+        }
+        
+        // Encouragement - simplified
+        if (llmFeedback.encouragement) {
+            html += `<p class="feedback-encouragement">💪 ${llmFeedback.encouragement}</p>`;
+        }
+        
+        // Safety flags (if any) - simplified
+        if (llmFeedback.safety_flags && llmFeedback.safety_flags.length > 0) {
+            html += '<div class="feedback-safety">';
+            llmFeedback.safety_flags.forEach(flag => {
+                html += `<span class="feedback-warning">⚠️ ${flag}</span>`;
+            });
+            html += '</div>';
+        }
+        
+        this.headerFeedbackArea.innerHTML = html;
+    }
+    
+    updateScoreIndicator(score) {
+        // No visual indicator needed - stars speak for themselves!
+        // Score circle background has been removed
     }
     
     clearFeedback() {
         this.scoreValue.textContent = '--';
         this.passStatus.textContent = '--';
-        this.passStatus.className = 'pass-indicator neutral';
-        this.feedbackList.innerHTML = '<li>Select a pose type and start feedback to begin</li>';
-        if (this.metricsDisplay) {
-        this.metricsDisplay.innerHTML = '<p>No metrics available yet</p>';
-        }
+        this.passStatus.className = 'pass-indicator-badge neutral';
         
-        // Reset score circle color
-        const scoreCircle = document.querySelector('.score-circle');
-        if (scoreCircle) {
-            scoreCircle.style.background = 'linear-gradient(135deg, #4A90E2, #63B3ED)';
+        // Restore title, hide feedback
+        if (this.headerTitleArea && this.headerFeedbackArea) {
+            this.headerTitleArea.style.display = 'block';
+            this.headerFeedbackArea.style.display = 'none';
         }
     }
     
@@ -785,9 +830,10 @@ waitForMediaPipe() {
         
         // Draw pose landmarks and connections
         if (results.poseLandmarks) {
-            this.drawPoseLandmarks(results.poseLandmarks);
-            this.drawPoseConnections(results.poseLandmarks);
-            this.drawPoseAvatar(results.poseLandmarks);
+            // Pose overlay disabled for cleaner view
+            // this.drawPoseLandmarks(results.poseLandmarks);
+            // this.drawPoseConnections(results.poseLandmarks);
+            // this.drawPoseAvatar(results.poseLandmarks);
             // Check for out-of-frame detection
             this.checkOutOfFrame(results.poseLandmarks);
         } else {
@@ -1399,7 +1445,7 @@ class GuidedSessionModal {
         this.instructionText = document.getElementById('exercise-instruction');
         this.timerDisplay = document.getElementById('exercise-timer');
         this.floatingPanel = document.getElementById('session-floating-panel');
-        this.floatingTimer = document.getElementById('floating-timer');
+        this.headerTimer = document.getElementById('header-timer');
         this.floatingExercise = document.getElementById('floating-exercise-name');
         this.floatingPauseBtn = document.getElementById('floating-pause-btn');
         this.floatingStopBtn = document.getElementById('floating-stop-btn');
@@ -1494,8 +1540,22 @@ class GuidedSessionModal {
             this.primaryBtn.disabled = true;
         }
         try {
+            // Start camera first
             await this.webcamManager.requestCameraPermission();
             await this.webcamManager.ensureCameraStarted();
+            
+            // Hide modal immediately so user can see camera
+            this.hideOverlay();
+            this.toggleConfig(false);
+            this.toggleLivePanel(false);
+            
+            // Small delay to ensure camera feed is visible
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Show countdown on top of camera view
+            await this.showCountdown();
+            
+            // Now start the actual session
             if (this.feedbackSystem) {
                 if (typeof this.feedbackSystem.setPoseType === 'function') {
                     this.feedbackSystem.setPoseType(this.currentExercise);
@@ -1506,10 +1566,8 @@ class GuidedSessionModal {
             this.remainingSeconds = this.exerciseDuration;
             this.updateInstructionCopy();
             this.updateTimerDisplay();
-            this.toggleConfig(false);
             this.toggleLivePanel(true);
             this.state = 'running';
-            this.hideOverlay();
             this.showFloatingPanel(false);
             this.setActions({
                 primaryText: 'Pause',
@@ -1520,6 +1578,7 @@ class GuidedSessionModal {
         } catch (error) {
             console.error('Unable to start exercise session:', error);
             this.setError('We could not access the camera. Please allow permissions and try again.');
+            this.showOverlay(); // Show modal again on error
             this.setActions({
                 primaryText: 'Start Session',
                 secondaryText: 'Back',
@@ -1530,6 +1589,57 @@ class GuidedSessionModal {
                 this.primaryBtn.disabled = false;
             }
         }
+    }
+    
+    async showCountdown() {
+        return new Promise((resolve) => {
+            const countdownOverlay = document.getElementById('countdown-overlay');
+            const countdownNumber = document.getElementById('countdown-number');
+            
+            if (!countdownOverlay || !countdownNumber) {
+                console.log('Countdown elements not found');
+                resolve();
+                return;
+            }
+            
+            console.log('Starting countdown...');
+            
+            // Show overlay
+            countdownOverlay.classList.remove('hidden');
+            
+            let count = 3;
+            countdownNumber.textContent = count;
+            countdownNumber.classList.remove('go');
+            
+            // Trigger animation by forcing reflow
+            countdownNumber.style.animation = 'none';
+            countdownNumber.offsetHeight; // Force reflow
+            countdownNumber.style.animation = 'countdownPulse 1s ease-in-out';
+            
+            const countdownInterval = setInterval(() => {
+                count--;
+                
+                if (count > 0) {
+                    countdownNumber.textContent = count;
+                    // Restart animation
+                    countdownNumber.style.animation = 'none';
+                    countdownNumber.offsetHeight; // Force reflow
+                    countdownNumber.style.animation = 'countdownPulse 1s ease-in-out';
+                } else if (count === 0) {
+                    countdownNumber.textContent = 'GO!';
+                    countdownNumber.classList.add('go');
+                    // Restart animation for GO
+                    countdownNumber.style.animation = 'none';
+                    countdownNumber.offsetHeight; // Force reflow
+                    countdownNumber.style.animation = 'countdownPulse 1s ease-in-out';
+                } else {
+                    clearInterval(countdownInterval);
+                    console.log('Countdown complete!');
+                    countdownOverlay.classList.add('hidden');
+                    resolve();
+                }
+            }, 1000);
+        });
     }
     
     pauseSession() {
@@ -1687,8 +1797,8 @@ class GuidedSessionModal {
         if (this.timerDisplay) {
             this.timerDisplay.textContent = formatted;
         }
-        if (this.floatingTimer) {
-            this.floatingTimer.textContent = formatted;
+        if (this.headerTimer) {
+            this.headerTimer.textContent = formatted;
         }
     }
     
@@ -1796,8 +1906,8 @@ class GuidedSessionModal {
         if (this.floatingExercise) {
             this.floatingExercise.textContent = this.formatExerciseName(this.currentExercise);
         }
-        if (this.floatingTimer) {
-            this.floatingTimer.textContent = this.formatTime(this.remainingSeconds);
+        if (this.headerTimer) {
+            this.headerTimer.textContent = this.formatTime(this.remainingSeconds);
         }
     }
     
