@@ -826,6 +826,15 @@ waitForMediaPipe() {
             this.ctx.fillStyle = '#7ED321';
         });
     }
+    drawPoseAvatar(landmarks) {
+        this.ctx.fillStyle = '#4A90E2';
+        const x = landmarks[0].x * this.canvas.width;
+        const y = landmarks[0].y * this.canvas.height;
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, this.canvas.width/8, 0, 2*Math.PI);
+        this.ctx.fill();
+        this.ctx.closePath();
+    }
     
     drawPoseConnections(landmarks) {
         const connections = [
@@ -867,15 +876,6 @@ waitForMediaPipe() {
                 this.ctx.stroke();
             }
         });
-    }
-    drawPoseAvatar(landmarks) {
-        this.ctx.fillStyle = '#4A90E2';
-        const x = landmarks[0].x * this.canvas.width;
-        const y = landmarks[0].y * this.canvas.height;
-        this.ctx.beginPath();
-        this.ctx.arc(x, y, this.canvas.width/8, 0, 2*Math.PI);
-        this.ctx.fill();
-        this.ctx.closePath();
     }
     
     startUpdateTimer() {
@@ -1831,6 +1831,12 @@ class GuidedSessionModal {
 
 // Initialize the webcam manager when the page loads
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize tutorial system if onboarding UI is present
+    const welcomeScreen = document.getElementById('welcome-screen');
+    if (welcomeScreen) {
+        new TutorialSystem();
+    }
+
     // Initialize immediately - waitForMediaPipe will handle script loading
     const webcamManager = new WebcamManager();
     const guidedSession = new GuidedSessionModal(webcamManager);
