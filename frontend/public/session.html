@@ -78,28 +78,26 @@
                     <span id="status-text">Initializing camera...</span>
                 </div>
             </div>
-            
-            <div class="controls">
-                <button id="start-btn" class="btn primary">Start Camera</button>
-                <button id="stop-btn" class="btn secondary" disabled>Stop Camera</button>
+
+            <div id="session-floating-panel" class="session-floating-panel hidden">
+                <div class="floating-details">
+                    <div class="floating-exercise">
+                        <p class="floating-label">Current Exercise</p>
+                        <p id="floating-exercise-name" class="floating-exercise-name">Partial Squat</p>
+                    </div>
+                    <div class="floating-timer">
+                        <span class="timer-label">Time Left</span>
+                        <span id="floating-timer">00:10</span>
+                    </div>
+                </div>
+                <div class="floating-actions">
+                    <button id="floating-pause-btn" class="btn secondary">Pause</button>
+                    <button id="floating-stop-btn" class="btn ghost">Stop</button>
+                </div>
             </div>
-            
+
             <div class="feedback-container">
                 <h3>Pose Validation & Feedback</h3>
-                <div class="pose-selector">
-                    <label for="pose-type-select">Select Pose Type:</label>
-                    <select id="pose-type-select">
-                        <option value="partial_squat">Partial Squat</option>
-                        <option value="heel_raises">Heel Raises</option>
-                        <option value="single_leg_stance">Single Leg Stance</option>
-                        <option value="tandem_stance">Tandem Stance</option>
-                        <option value="functional_reach">Functional Reach</option>
-                        <option value="tree_pose">Tree Pose</option>
-                    </select>
-                    <button id="start-feedback-btn" class="btn tertiary" disabled>Start Real-time Feedback</button>
-                    <button id="stop-feedback-btn" class="btn tertiary" disabled>Stop Feedback</button>
-                </div>
-                
                 <div class="feedback-display">
                     <div class="score-section">
                         <div class="score-circle">
@@ -117,24 +115,6 @@
                             <li>Select a pose type and start feedback to begin</li>
                         </ul>
                     </div>
-                    
-                    <div class="metrics-section">
-                        <h4>Current Metrics:</h4>
-                        <div id="metrics-display">
-                            <p>No metrics available yet</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="pose-data-container">
-                <h3>Raw Pose Estimation Data</h3>
-                <div class="pose-data-display">
-                    <div class="data-header">
-                        <span>Last Updated: <span id="last-update">Never</span></span>
-                        <span>Next Update: <span id="next-update">--</span></span>
-                    </div>
-                    <pre id="pose-data-output">No pose data available yet. Start the camera to begin pose estimation.</pre>
                 </div>
             </div>
         </main>
@@ -142,6 +122,46 @@
         <footer>
             <p>Capstone Project - PTPal Physical Therapy Assistant</p>
         </footer>
+    </div>
+    
+    <!-- Guided session overlay -->
+    <div id="session-overlay" class="session-overlay">
+        <div class="session-modal">
+            <div class="session-modal-header">
+                <h3 id="session-modal-title">Welcome to your PT session</h3>
+                <p id="session-modal-description">We’ll guide you through each step so you always know what’s next.</p>
+            </div>
+            
+            <div id="session-modal-error" class="session-modal-error" role="alert" aria-live="polite"></div>
+            
+            <div class="session-modal-content">
+                <div id="session-exercise-config" class="session-config hidden">
+                    <label for="pose-type-select">Choose an exercise</label>
+                    <select id="pose-type-select">
+                        <option value="partial_squat">Partial Squat</option>
+                        <option value="heel_raises">Heel Raises</option>
+                        <option value="single_leg_stance">Single Leg Stance</option>
+                        <option value="tandem_stance">Tandem Stance</option>
+                        <option value="functional_reach">Functional Reach</option>
+                        <option value="tree_pose">Tree Pose</option>
+                    </select>
+                </div>
+                
+                <div id="session-live-panel" class="session-live-panel hidden">
+                    <p id="exercise-instruction">Click Start Session to begin.</p>
+                    <div class="session-timer">
+                        <span class="timer-label">Timer</span>
+                        <span id="exercise-timer">00:10</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="session-modal-actions">
+                <button id="session-home-action" class="btn ghost hidden">Return Home</button>
+                <button id="session-secondary-action" class="btn secondary ghost">Cancel</button>
+                <button id="session-primary-action" class="btn primary">Continue</button>
+            </div>
+        </div>
     </div>
     
     <!-- MediaPipe BlazePose -->
