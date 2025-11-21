@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Account - PT Pal</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Lustria:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <a href="/">
+                    <img src="/images/Screenshot_2025-11-16_at_6.08.36_PM-removebg-preview.png" alt="PT Pal Logo" class="logo-icon">
+                    <span class="logo-text">PT Pal</span>
+                </a>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link">Home</a></li>
+                <li><a href="#" class="nav-link nav-link-disabled" onclick="return false;">Exercises</a></li>
+                <li><a href="#" class="nav-link nav-link-disabled" onclick="return false;">About</a></li>
+                <li><a href="#" class="nav-link nav-link-disabled" onclick="return false;">Contact</a></li>
+            </ul>
+            <div class="nav-buttons">
+                <button class="nav-login" onclick="window.location.href='/account.html'">My Account</button>
+                <button class="nav-logout" onclick="handleLogout()">Log Out</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Account Section -->
+    <section class="account-section">
+        <div class="container">
+            <div class="account-header">
+                <h1>Welcome back, <span id="user-name">User</span>! 👋</h1>
+                <p>Track your progress and continue your physical therapy journey</p>
+                <div class="overall-progress-container">
+                    <div class="progress-bar-wrapper">
+                        <div class="progress-bar" id="overall-progress-bar">
+                            <div class="progress-bar-fill" id="overall-progress-fill"></div>
+                        </div>
+                        <span class="progress-percentage" id="progress-percentage">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Cards -->
+            <div class="progress-grid">
+                <div class="progress-card">
+                    <div class="progress-icon"><img src="/images/Screenshot_2025-11-18_at_12.18.23_PM-removebg-preview.png" alt="Star Badge" style="width: 5rem; height: 5rem; object-fit: contain;"></div>
+                    <h3>Total Stars</h3>
+                    <div class="progress-value" id="total-stars">0</div>
+                    <p>Keep exercising to earn more!</p>
+                </div>
+                <div class="progress-card">
+                    <div class="progress-icon">🏆</div>
+                    <h3>Current Level</h3>
+                    <div class="progress-value" id="current-level">Level 1</div>
+                    <p>You're doing great!</p>
+                </div>
+                <div class="progress-card">
+                    <div class="progress-icon">🔥</div>
+                    <h3>Day Streak</h3>
+                    <div class="progress-value" id="day-streak">0 Days</div>
+                    <p>Keep the streak going!</p>
+                </div>
+                <div class="progress-card">
+                    <div class="progress-icon">✅</div>
+                    <h3>Exercises Completed</h3>
+                    <div class="progress-value" id="exercises-completed">0</div>
+                    <p>Great job on your progress!</p>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="activity-section">
+                <h2>Recent Activity</h2>
+                <div class="activity-list" id="activity-list">
+                    <div class="activity-item">
+                        <div class="activity-content">
+                            <h4>Welcome to PT Pal!</h4>
+                            <p>You've joined the PT Pal community. Start your first session to begin tracking your progress!</p>
+                            <span class="activity-date">Today</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Begin Session Button -->
+            <div class="session-section">
+                <button class="btn btn-primary btn-large btn-session" id="begin-session-btn">
+                    Begin Session
+                </button>
+                <p class="session-note">Click to start a new physical therapy session</p>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Load user data
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        
+        if (user.name) {
+            document.getElementById('user-name').textContent = user.name;
+        } else {
+            // If no user data, redirect to auth page
+            window.location.href = '/auth.html';
+        }
+
+        // Check if this is the special demo user (case-insensitive email)
+        const isDemoUser = user.email && user.email.toLowerCase() === 'janedoe@gmail.com' && user.password === 'helloworld';
+        
+        // Set progress data based on user
+        let progress;
+        if (isDemoUser) {
+            // Special stats for demo user
+            progress = {
+                totalStars: 12,
+                level: 7,
+                dayStreak: 7,
+                exercisesCompleted: 30
+            };
+        } else {
+            // Default stats for all other users
+            progress = {
+                totalStars: 0,
+                level: 1,
+                dayStreak: 0,
+                exercisesCompleted: 0
+            };
+        }
+        
+        // Display the progress
+        document.getElementById('total-stars').textContent = progress.totalStars;
+        document.getElementById('current-level').textContent = 'Level ' + progress.level;
+        document.getElementById('day-streak').textContent = progress.dayStreak + ' Days';
+        document.getElementById('exercises-completed').textContent = progress.exercisesCompleted;
+
+        // Set overall progress bar
+        const overallProgress = isDemoUser ? 50 : 0;
+        document.getElementById('overall-progress-fill').style.width = overallProgress + '%';
+        document.getElementById('progress-percentage').textContent = overallProgress + '%';
+
+        // Add activity logs for Jane Doe
+        if (isDemoUser) {
+            const activityList = document.getElementById('activity-list');
+            activityList.innerHTML = ''; // Clear the welcome message
+            
+            const activities = [
+                {
+                    sessionNumber: 7,
+                    exercises: ['Partial Squat', 'Tree Pose', 'Heel Raises', 'Single Leg Stance', 'Tandem Stance'],
+                    totalScore: 450,
+                    date: '2 days ago'
+                },
+                {
+                    sessionNumber: 6,
+                    exercises: ['Functional Reach', 'Partial Squat', 'Tree Pose', 'Heel Raises', 'Single Leg Stance'],
+                    totalScore: 442,
+                    date: '3 days ago'
+                },
+                {
+                    sessionNumber: 5,
+                    exercises: ['Tandem Stance', 'Functional Reach', 'Partial Squat', 'Tree Pose', 'Heel Raises'],
+                    totalScore: 435,
+                    date: '4 days ago'
+                },
+                {
+                    sessionNumber: 4,
+                    exercises: ['Single Leg Stance', 'Tandem Stance', 'Functional Reach', 'Partial Squat', 'Tree Pose'],
+                    totalScore: 428,
+                    date: '5 days ago'
+                },
+                {
+                    sessionNumber: 3,
+                    exercises: ['Heel Raises', 'Single Leg Stance', 'Tandem Stance', 'Functional Reach', 'Partial Squat'],
+                    totalScore: 420,
+                    date: '6 days ago'
+                },
+                {
+                    sessionNumber: 2,
+                    exercises: ['Tree Pose', 'Heel Raises', 'Single Leg Stance', 'Tandem Stance', 'Functional Reach'],
+                    totalScore: 415,
+                    date: '1 week ago'
+                },
+                {
+                    sessionNumber: 1,
+                    exercises: ['Partial Squat', 'Tree Pose', 'Heel Raises', 'Single Leg Stance', 'Tandem Stance'],
+                    totalScore: 410,
+                    date: '1 week ago'
+                }
+            ];
+            
+            activities.forEach(activity => {
+                const activityItem = document.createElement('div');
+                activityItem.className = 'activity-item';
+                const exercisesList = activity.exercises.join(', ');
+                activityItem.innerHTML = `
+                    <div class="activity-content">
+                        <h4>Session ${activity.sessionNumber}:</h4>
+                        <p>Completed 5 exercises: ${exercisesList}. Total Score: ${activity.totalScore}/500</p>
+                        <span class="activity-date">${activity.date}</span>
+                    </div>
+                `;
+                activityList.appendChild(activityItem);
+            });
+        }
+
+        // Begin Session button - navigate to session page
+        document.getElementById('begin-session-btn').addEventListener('click', () => {
+            window.location.href = '/session';
+        });
+
+        // Logout function
+        function handleLogout() {
+            // Clear user data from localStorage
+            localStorage.removeItem('user');
+            localStorage.removeItem('progress');
+            
+            // Redirect to homepage
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>
+

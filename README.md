@@ -133,6 +133,7 @@ Then open: **https://localhost:3000**
 ### Data Collection
 - `POST /api/pose-data` - Receive pose landmarks from frontend
 - `POST /api/new-session` - Notify backend of new session start
+- `POST /api/validate-pose` - Validate pose quality and return feedback
 
 ### Data Access
 - `GET /` - Live data display (current session only)
@@ -140,6 +141,71 @@ Then open: **https://localhost:3000**
 - `GET /api/export/<session_id>` - Export session data as JSON
 - `GET /api/data/view` - Summary of recent data and sessions
 - `GET /api/health` - Health check endpoint
+
+### Pose Validation Usage
+
+**Supported Pose Types:**
+- `partial_squat` (alias: `squat`) - Validates squat depth, knee alignment, heel position, trunk lean
+- `heel_raises` (alias: `heel_raise`) - Validates heel height, bilateral symmetry, ankle stability  
+- `single_leg_stance` (alias: `balance`, `single_leg`) - Validates hold time, sway, pelvic level
+- `tandem_stance` (alias: `tandem`) - Validates heel-to-toe alignment, trunk lean, hold time
+- `functional_reach` (alias: `reach`) - Validates reach distance, trunk flexion, foot stability
+- `tree_pose` (alias: `tree`) - Validates pelvic level, sway, arm alignment, hold time
+
+**Example: Validate a squat**
+```javascript
+fetch('http://localhost:8001/api/validate-pose', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        pose_type: 'partial_squat',  // or use alias 'squat'
+        landmarks: results.poseLandmarks  // from BlazePose (33 points)
+    })
+}).then(r => r.json()).then(data => {
+    console.log(`Score: ${data.score}/100`);
+    console.log(`Pass: ${data.pass}`);
+    console.log(`Feedback: ${data.feedback.join(', ')}`);
+    console.log(`Metrics:`, data.metrics);
+});
+```
+
+**Example Response:**
+```json
+{
+  "status": "success",
+  "pose": "Partial Squat",
+  "score": 75,
+  "pass": true,
+  "feedback": [
+    "Go deeper: knee flexion 35° < 45°."
+  ],
+  "metrics": {
+    "knee_flexion_deg": 35.2,
+    "hip_knee_ankle_alignment_deg": 7.5,
+    "heel_height_cm": 0.3,
+    "trunk_forward_lean_deg": 22.1
+  }
+}
+```
+
+**Computed Metrics:**
+
+Knee flexion angles (left, right, average)
+- Hip-knee-ankle alignment (frontal plane)
+- Heel height in cm (approximated)
+- Trunk forward lean angle
+- Bilateral symmetry percentage
+- Pelvic drop/obliquity
+- Arm overhead alignment
+- Reach distance ratio
+- Hold time (requires temporal tracking - set to 0)
+- Sway peak (requires temporal tracking - set to 0)
+
+**Test the validation:**
+```bash
+cd backend
+python test_validation.py
+```
 
 ## Database Schema
 

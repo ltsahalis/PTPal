@@ -48,6 +48,21 @@ def init_database():
         )
     ''')
     
+    # Create feedback results table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS feedback_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            pose_type TEXT NOT NULL,
+            score INTEGER NOT NULL,
+            pass_fail BOOLEAN NOT NULL,
+            feedback TEXT NOT NULL,
+            metrics TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # No feedback table needed - just storing angles for external analysis
     
     conn.commit()
@@ -266,7 +281,15 @@ def compute_pose_metrics(pose_type, landmarks):
             else:
                 metrics['symmetry_diff_pct'] = 0
         else:
-            metrics['symmetry_diff_pct'] = 0
+            # For heel raises, use heel height for symmetry
+            if left_heel_height > 0 or right_heel_height > 0:
+                max_height = max(left_heel_height, right_heel_height)
+                if max_height > 0:
+                    metrics['symmetry_diff_pct'] = abs(left_heel_height - right_heel_height) / max_height * 100
+                else:
+                    metrics['symmetry_diff_pct'] = 0
+            else:
+                metrics['symmetry_diff_pct'] = 0
         
         # Pelvic drop/obliquity (hip height difference)
         hip_height_diff = abs(landmarks[LEFT_HIP]['y'] - landmarks[RIGHT_HIP]['y'])
@@ -291,11 +314,12 @@ def compute_pose_metrics(pose_type, landmarks):
             metrics['sway_peak_deg'] = 0  # Must be tracked over time
             
             # Arm overhead alignment (for tree pose)
-            if landmarks[LEFT_WRIST]['y'] < landmarks[LEFT_SHOULDER]['y'] and landmarks[RIGHT_WRIST]['y'] < landmarks[RIGHT_SHOULDER]['y']:
-                wrist_height_diff = abs(landmarks[LEFT_WRIST]['y'] - landmarks[RIGHT_WRIST]['y'])
-                metrics['arm_overhead_alignment_deg'] = wrist_height_diff * 100
-            else:
-                metrics['arm_overhead_alignment_deg'] = 20  # Arms not raised
+            if pose_type == 'tree_pose':
+                if landmarks[LEFT_WRIST]['y'] < landmarks[LEFT_SHOULDER]['y'] and landmarks[RIGHT_WRIST]['y'] < landmarks[RIGHT_SHOULDER]['y']:
+                    wrist_height_diff = abs(landmarks[LEFT_WRIST]['y'] - landmarks[RIGHT_WRIST]['y'])
+                    metrics['arm_overhead_alignment_deg'] = wrist_height_diff * 100
+                else:
+                    metrics['arm_overhead_alignment_deg'] = 20  # Arms not raised
         
         elif pose_type == 'tandem_stance':
             # Foot line deviation (heel-to-toe alignment)
@@ -329,7 +353,6 @@ def compute_pose_metrics(pose_type, landmarks):
     except Exception as e:
         print(f"Error computing pose metrics: {e}")
         return {}
-
 @app.route('/api/validate-pose', methods=['POST'])
 def validate_pose_endpoint():
     """Validate pose quality and return detailed feedback"""
@@ -367,6 +390,29 @@ def validate_pose_endpoint():
         # Validate using the pose validator
         result = evaluate_pose(validator_key, metrics)
         
+        # Store feedback results in database
+        session_id = data.get('session_id', f'session_{int(datetime.now().timestamp() * 1000)}')
+        timestamp = datetime.now().isoformat()
+        
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO feedback_results (session_id, timestamp, pose_type, score, pass_fail, feedback, metrics)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            session_id,
+            timestamp,
+            validator_key,
+            result.score,
+            result.pass_fail,
+            json.dumps(result.reasons),
+            json.dumps(result.metrics)
+        ))
+        
+        conn.commit()
+        conn.close()
+        
         return jsonify({
             "status": "success",
             "pose": result.pose,
@@ -374,7 +420,9 @@ def validate_pose_endpoint():
             "pass": result.pass_fail,
             "feedback": result.reasons,
             "metrics": result.metrics,
-            "all_computed_metrics": metrics  # Show all computed values
+            "all_computed_metrics": metrics,  # Show all computed values
+            "session_id": session_id,
+            "timestamp": timestamp
         })
         
     except KeyError as e:
