@@ -48,6 +48,21 @@ def init_database():
         )
     ''')
     
+    # Create feedback results table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS feedback_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            pose_type TEXT NOT NULL,
+            score INTEGER NOT NULL,
+            pass_fail BOOLEAN NOT NULL,
+            feedback TEXT NOT NULL,
+            metrics TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # No feedback table needed - just storing angles for external analysis
     
     conn.commit()
@@ -266,7 +281,15 @@ def compute_pose_metrics(pose_type, landmarks):
             else:
                 metrics['symmetry_diff_pct'] = 0
         else:
-            metrics['symmetry_diff_pct'] = 0
+            # For heel raises, use heel height for symmetry
+            if left_heel_height > 0 or right_heel_height > 0:
+                max_height = max(left_heel_height, right_heel_height)
+                if max_height > 0:
+                    metrics['symmetry_diff_pct'] = abs(left_heel_height - right_heel_height) / max_height * 100
+                else:
+                    metrics['symmetry_diff_pct'] = 0
+            else:
+                metrics['symmetry_diff_pct'] = 0
         
         # Pelvic drop/obliquity (hip height difference)
         hip_height_diff = abs(landmarks[LEFT_HIP]['y'] - landmarks[RIGHT_HIP]['y'])
@@ -428,7 +451,6 @@ def compute_pose_metrics(pose_type, landmarks):
     except Exception as e:
         print(f"Error computing pose metrics: {e}")
         return {}
-
 @app.route('/api/validate-pose', methods=['POST'])
 def validate_pose_endpoint():
     """Validate pose quality and return detailed feedback"""
@@ -470,6 +492,28 @@ def validate_pose_endpoint():
         
         # Get AI-enhanced feedback from OpenAI (if configured)
         llm_feedback = get_llm_feedback(result)
+        # Store feedback results in database
+        session_id = data.get('session_id', f'session_{int(datetime.now().timestamp() * 1000)}')
+        timestamp = datetime.now().isoformat()
+        
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO feedback_results (session_id, timestamp, pose_type, score, pass_fail, feedback, metrics)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            session_id,
+            timestamp,
+            validator_key,
+            result.score,
+            result.pass_fail,
+            json.dumps(result.reasons),
+            json.dumps(result.metrics)
+        ))
+        
+        conn.commit()
+        conn.close()
         
         return jsonify({
             "status": "success",
@@ -480,6 +524,8 @@ def validate_pose_endpoint():
             "metrics": result.metrics,
             "all_computed_metrics": metrics,  # Show all computed values
             "llm_feedback": llm_feedback  # AI-enhanced feedback (None if not configured)
+            "session_id": session_id,
+            "timestamp": timestamp
         })
         
     except KeyError as e:

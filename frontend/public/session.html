@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTPal Demo</title>
+    <link rel="stylesheet" href="/css/session.css">
+</head>
+<body>
+    <!-- Welcome/Onboarding Screen -->
+    <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-content">
+            <div class="welcome-logo">
+                <div class="logo-figure">
+                    <div class="figure-head"></div>
+                    <div class="figure-body-green"></div>
+                    <div class="figure-body-blue"></div>
+                </div>
+            </div>
+            <h1>Welcome to PTPal</h1>
+            <p>Your intelligent Physical Therapy Assistant</p>
+            <div class="welcome-buttons">
+                <button id="start-tutorial-btn" class="btn primary">Start Tutorial</button>
+                <button id="skip-tutorial-btn" class="btn secondary">Skip</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tutorial Overlay -->
+    <div id="tutorial-overlay" class="tutorial-overlay" style="display: none;">
+        <div id="tutorial-backdrop" class="tutorial-backdrop"></div>
+        <div id="tutorial-popup" class="tutorial-popup">
+            <div class="tutorial-header">
+                <span class="tutorial-progress" id="tutorial-progress">1 / 6</span>
+                <div class="tutorial-header-actions">
+                    <a href="/" class="tutorial-home-btn">Home</a>
+                    <button id="close-tutorial-btn" class="close-tutorial">×</button>
+                </div>
+            </div>
+            <div class="tutorial-content">
+                <h2 id="tutorial-title">Welcome to PTPal!</h2>
+                <p id="tutorial-description">Let's get started with a quick tour of the app.</p>
+            </div>
+            <div class="tutorial-footer">
+                <button id="prev-tutorial-btn" class="btn secondary" disabled>Previous</button>
+                <button id="next-tutorial-btn" class="btn primary">Next</button>
+                <button id="finish-tutorial-btn" class="btn primary" style="display: none;">Finish</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <header class="session-header">
+            <div class="session-brand">
+                <div class="brand-mark">
+                    <span>PT</span>
+                </div>
+                <div class="brand-copy">
+                    <p class="eyebrow">PTPal Physical Therapy Assistant</p>
+                    <h1>Guided Balance Session</h1>
+                    <p class="subline">Real-time pose validation with actionable coaching</p>
+                </div>
+            </div>
+            <div class="session-header-meta">
+                <div class="meta-card">
+                    <span class="meta-label">Status</span>
+                    <span class="meta-value accent" id="session-state-label">Standing by</span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="webcam-container">
+                <div class="webcam-stage">
+                    <div class="stage-overlay stage-overlay--top">
+                        <div id="session-floating-panel" class="session-floating-panel hud-card hidden">
+                            <div class="floating-details">
+                                <div class="floating-exercise">
+                                    <p class="floating-label">Current Exercise</p>
+                                    <p id="floating-exercise-name" class="floating-exercise-name">Partial Squat</p>
+                                </div>
+                                <div class="floating-timer">
+                                    <span class="timer-label">Time Left</span>
+                                    <span id="floating-timer">00:30</span>
+                                </div>
+                            </div>
+                            <div class="floating-actions">
+                                <button id="floating-pause-btn" class="btn secondary">Pause</button>
+                                <button id="floating-stop-btn" class="btn ghost">Stop</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <video id="webcam" autoplay playsinline></video>
+                    <canvas id="output-canvas"></canvas>
+
+                    <div class="feedback-container hud-card">
+                        <h3>Pose Validation & Feedback</h3>
+                        <div class="feedback-display">
+                            <div class="score-section">
+                                <div class="score-circle">
+                                    <span id="score-value">--</span>
+                                    <span class="score-label">Score</span>
+                                </div>
+                                <div class="pass-indicator">
+                                    <span id="pass-status">--</span>
+                                </div>
+                            </div>
+                            
+                            <div class="feedback-section">
+                                <h4>Tips</h4>
+                                <ul id="feedback-list">
+                                    <li>Select a pose type and start feedback to begin</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>Capstone Project - PTPal Physical Therapy Assistant</p>
+        </footer>
+    </div>
+
+    <!-- Onboarding Modal -->
+    <div id="onboarding-modal" class="onboarding-modal" style="display: none;">
+        <div class="onboarding-backdrop"></div>
+        <div class="onboarding-content">
+            <button class="onboarding-close" id="close-onboarding">×</button>
+            <div class="onboarding-slides">
+                <div class="onboarding-slide active">
+                    <img src="/images/Screenshot_2025-11-16_at_6.08.36_PM-removebg-preview.png" alt="PT Pal Logo" class="slide-logo">
+                    <h2>Welcome to PTPal!</h2>
+                    <div class="slide-instructions">
+                        <p>Your intelligent Physical Therapy Assistant</p>
+                        <p>This tutorial will guide you through the key features.</p>
+                    </div>
+                </div>
+                <div class="onboarding-slide">
+                    <div class="slide-icon">📹</div>
+                    <h2>Camera Access</h2>
+                    <div class="slide-instructions">
+                        <p><strong>Step 1:</strong> Click "Start Camera"</p>
+                        <p><strong>Step 2:</strong> Allow camera access</p>
+                        <p><strong>Step 3:</strong> Position yourself in front of camera</p>
+                    </div>
+                </div>
+                <div class="onboarding-slide">
+                    <img src="/images/Screenshot_2025-11-18_at_12.31.21_PM-removebg-preview.png" alt="Exercise" class="slide-image">
+                    <h2>Choose Your Exercise</h2>
+                    <div class="slide-instructions">
+                        <p><strong>Step 1:</strong> Select exercise from dropdown</p>
+                        <p><strong>Available:</strong> Partial Squat, Heel Raises, Tree Pose, Single Leg Stance, and more</p>
+                    </div>
+                </div>
+                <div class="onboarding-slide">
+                    <div class="slide-icon">🗣️</div>
+                    <h2>Real-Time Feedback</h2>
+                    <div class="slide-instructions">
+                        <p><strong>Step 1:</strong> Click "Start Real-time Feedback"</p>
+                        <p><strong>Step 2:</strong> Follow on-screen instructions</p>
+                        <p><strong>Step 3:</strong> Watch for form feedback</p>
+                    </div>
+                </div>
+                <div class="onboarding-slide">
+                    <h2>Score and Status</h2>
+                    <div class="slide-instructions">
+                        <p>Your performance is scored in real-time (0-100)</p>
+                        <p>You'll see a <strong>PASS</strong> or <strong>FAIL</strong> indicator</p>
+                        <p>Based on your pose quality and form</p>
+                    </div>
+                </div>
+                <div class="onboarding-slide">
+                    <h2>Raw Pose Data</h2>
+                    <div class="slide-instructions">
+                        <p>For advanced users, view raw pose estimation data</p>
+                        <p>Shows all landmark coordinates detected by the system</p>
+                        <p>Helps understand how the AI tracks your movements</p>
+                    </div>
+                </div>
+                <div class="onboarding-slide">
+                    <h2>Ready to Start!</h2>
+                    <div class="slide-instructions">
+                        <p><strong>You're all set!</strong></p>
+                        <p>Click "Start" to begin your session.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="onboarding-navigation">
+                <button class="nav-arrow" id="prev-slide" disabled>←</button>
+                <div class="slide-indicators">
+                    <span class="indicator active" data-slide="0"></span>
+                    <span class="indicator" data-slide="1"></span>
+                    <span class="indicator" data-slide="2"></span>
+                    <span class="indicator" data-slide="3"></span>
+                    <span class="indicator" data-slide="4"></span>
+                    <span class="indicator" data-slide="5"></span>
+                    <span class="indicator" data-slide="6"></span>
+                </div>
+                <button class="nav-arrow" id="next-slide">→</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Guided session overlay -->
+    <div id="session-overlay" class="session-overlay">
+        <div class="session-modal">
+            <div class="session-modal-header">
+                <h3 id="session-modal-title">Welcome to your PT session</h3>
+                <p id="session-modal-description">We’ll guide you through each step so you always know what’s next.</p>
+            </div>
+            
+            <div id="session-modal-error" class="session-modal-error" role="alert" aria-live="polite"></div>
+            
+            <div class="session-modal-content">
+                <div id="session-exercise-config" class="session-config hidden">
+                    <label for="pose-type-select">Choose an exercise</label>
+                    <select id="pose-type-select">
+                        <option value="partial_squat">Partial Squat</option>
+                        <option value="heel_raises">Heel Raises</option>
+                        <option value="single_leg_stance">Single Leg Stance</option>
+                        <option value="tandem_stance">Tandem Stance</option>
+                        <option value="functional_reach">Functional Reach</option>
+                        <option value="tree_pose">Tree Pose</option>
+                    </select>
+                </div>
+                
+                <div id="session-live-panel" class="session-live-panel hidden">
+                    <p id="exercise-instruction">Click Start Session to begin.</p>
+                    <div class="session-timer">
+                        <span class="timer-label">Timer</span>
+                        <span id="exercise-timer">00:30</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="session-modal-actions">
+                <a id="session-home-action" class="btn ghost" href="/">Return Home</a>
+                <button id="session-secondary-action" class="btn secondary ghost">Cancel</button>
+                <button id="session-primary-action" class="btn primary">Continue</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- MediaPipe BlazePose -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js"></script>
+    
+    <script src="/js/session.js"></script>
+    <script>
+        // Onboarding Modal - Show on first visit to session page
+        document.addEventListener('DOMContentLoaded', () => {
+            const onboardingModal = document.getElementById('onboarding-modal');
+            const closeOnboarding = document.getElementById('close-onboarding');
+            const prevSlideBtn = document.getElementById('prev-slide');
+            const nextSlideBtn = document.getElementById('next-slide');
+            const slides = document.querySelectorAll('.onboarding-slide');
+            const indicators = document.querySelectorAll('.indicator');
+            let currentSlide = 0;
+            const totalSlides = slides.length;
+            
+            // Always show onboarding modal when session page loads
+            if (onboardingModal) {
+                onboardingModal.style.display = 'flex';
+                setTimeout(() => {
+                    onboardingModal.classList.add('active');
+                }, 50);
+            }
+            
+            // Update slide display
+            function updateSlide() {
+                slides.forEach((slide, index) => {
+                    slide.classList.toggle('active', index === currentSlide);
+                });
+                
+                indicators.forEach((indicator, index) => {
+                    indicator.classList.toggle('active', index === currentSlide);
+                });
+                
+                // Update navigation buttons
+                prevSlideBtn.disabled = currentSlide === 0;
+                if (currentSlide === totalSlides - 1) {
+                    nextSlideBtn.textContent = 'Start';
+                    nextSlideBtn.classList.add('start-btn');
+                } else {
+                    nextSlideBtn.textContent = '→';
+                    nextSlideBtn.classList.remove('start-btn');
+                }
+            }
+            
+            // Next slide
+            nextSlideBtn.addEventListener('click', () => {
+                if (currentSlide === totalSlides - 1) {
+                    // Last slide - close modal
+                    closeOnboardingModal();
+                } else {
+                    currentSlide++;
+                    updateSlide();
+                }
+            });
+            
+            // Previous slide
+            prevSlideBtn.addEventListener('click', () => {
+                if (currentSlide > 0) {
+                    currentSlide--;
+                    updateSlide();
+                }
+            });
+            
+            // Indicator click
+            indicators.forEach((indicator, index) => {
+                indicator.addEventListener('click', () => {
+                    currentSlide = index;
+                    updateSlide();
+                });
+            });
+            
+            // Close onboarding handlers
+            function closeOnboardingModal() {
+                onboardingModal.classList.remove('active');
+                setTimeout(() => {
+                    onboardingModal.style.display = 'none';
+                }, 300);
+            }
+            
+            if (closeOnboarding) {
+                closeOnboarding.addEventListener('click', closeOnboardingModal);
+            }
+            
+            // Close on backdrop click
+            const backdrop = document.querySelector('.onboarding-backdrop');
+            if (backdrop) {
+                backdrop.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('onboarding-backdrop')) {
+                        closeOnboardingModal();
+                    }
+                });
+            }
+            
+            // Initialize
+            updateSlide();
+            
+            // Handle restart tutorial button
+            const restartTutorialBtn = document.getElementById('restart-tutorial-btn');
+            if (restartTutorialBtn) {
+                restartTutorialBtn.addEventListener('click', () => {
+                    currentSlide = 0;
+                    updateSlide();
+                    onboardingModal.style.display = 'flex';
+                    setTimeout(() => {
+                        onboardingModal.classList.add('active');
+                    }, 50);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

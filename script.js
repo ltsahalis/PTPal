@@ -1890,4 +1890,17 @@ document.addEventListener('DOMContentLoaded', () => {
         webcamManager.updateStatus('Your browser does not support camera access. Please use a modern browser.', 'error');
         webcamManager.startBtn.disabled = true;
     }
+    
+    // Home button - redirect to account if logged in, otherwise to homepage
+    const homeBtn = document.getElementById('home-btn');
+    if (homeBtn) {
+        homeBtn.addEventListener('click', (event) => {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            if (user.email) {
+                event.preventDefault();
+                window.location.href = '/account';
+            }
+            // If no user, allow the anchor's default navigation to '/'
+        });
+    }
 });

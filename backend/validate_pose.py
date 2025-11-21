@@ -40,7 +40,7 @@ load_dotenv()
 
 # Optional OpenAI integration - only if API key is set
 try:
-    from openai import OpenAI
+    from openai import OpenAI  # pyright: ignore[reportMissingImports]
     api_key = os.environ.get('OPENAI_API_KEY')
     client = OpenAI(api_key=api_key) if api_key else None
     if client:
@@ -275,19 +275,16 @@ def validate_functional_reach(metrics: Dict[str, float], th: Thresholds = Thresh
 
     reasons: List[str] = []
     fails = 0
-    checks = 3
+    checks = 4
 
     fails += _bool_fail(metrics["reach_distance_ratio"] < th.fr_min_reach_ratio,
                         f"Reach further: ratio {metrics['reach_distance_ratio']:.2f} < {th.fr_min_reach_ratio:.2f}.", reasons)
-    #fails += _bool_fail(metrics["trunk_forward_lean_deg"] > th.fr_max_trunk_flexion_deg,
-                       # f"Reach with arms, not trunk: flexion {metrics['trunk_forward_lean_deg']:.0f}° > {th.fr_max_trunk_flexion_deg:.0f}°.", reasons)
     fails += _bool_fail(metrics["stepped_during_task"] >= 0.5,
                         "Keep feet planted: stepping detected.", reasons)
     fails += _bool_fail(metrics["trunk_forward_lean_deg"] < th.fr_min_trunk_flexion_deg,
-                    f"Lean forward slightly: trunk flexion {metrics['trunk_forward_lean_deg']:.0f}° < {th.fr_min_trunk_flexion_deg:.0f}°.", reasons)
+                        f"Lean forward slightly: trunk flexion {metrics['trunk_forward_lean_deg']:.0f}° < {th.fr_min_trunk_flexion_deg:.0f}°.", reasons)
     fails += _bool_fail(metrics["trunk_forward_lean_deg"] > th.fr_max_trunk_flexion_deg,
-                    f"Reach with arms, not trunk: flexion {metrics['trunk_forward_lean_deg']:.0f}° > {th.fr_max_trunk_flexion_deg:.0f}°.", reasons)                     
-                    
+                        f"Reach with arms, not trunk: flexion {metrics['trunk_forward_lean_deg']:.0f}° > {th.fr_max_trunk_flexion_deg:.0f}°.", reasons)
 
     score = _score_from_flags(checks, fails)
     return PoseResult(
@@ -629,12 +626,16 @@ if __name__ == "__main__":
     for k, m in sample.items():
         res = evaluate_pose(k, m)
         print(f"{res.pose}: score={res.score}, pass={res.pass_fail}, reasons={res.reasons}")
+        # Only use LLM if client is available
         if client:
-            response = client.responses.create(
-                model="gpt-4.1",
-                input=build_llm_messages(res),
-                store=True,
-            )
-            print("LLM feedback:", response)
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4",
+                    messages=build_llm_messages(res),
+                    response_format={"type": "json_object"}
+                )
+                print(f"LLM Response: {response.choices[0].message.content}")
+            except Exception as e:
+                print(f"LLM Error: {e}")
         else:
-            print("No OpenAI client configured; skipping LLM feedback.")
+            print("LLM client not available (no API key)")
