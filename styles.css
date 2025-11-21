@@ -709,9 +709,12 @@ footer {
 }
 
 #score-value {
-    font-size: 2rem;
+    font-size: 2.2rem;
     font-weight: 700;
     line-height: 1;
+    letter-spacing: 2px;
+    color: #FFD700; /* Golden color for stars */
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .score-label {
@@ -835,7 +838,8 @@ footer {
     }
     
     #score-value {
-        font-size: 1.6rem;
+        font-size: 1.8rem;
+        letter-spacing: 1px;
     }
 }
 

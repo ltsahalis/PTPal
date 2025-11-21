@@ -429,8 +429,13 @@ class RealTimeFeedbackREST {
     }
     
     displayFeedback(feedback) {
-        // Update score
-        this.scoreValue.textContent = feedback.score || '--';
+        // Update score with star rating (1-5 scale)
+        if (feedback.score) {
+            const stars = '★'.repeat(feedback.score) + '☆'.repeat(5 - feedback.score);
+            this.scoreValue.textContent = stars;
+        } else {
+            this.scoreValue.textContent = '--';
+        }
         
         // Update pass/fail status
         this.updatePassStatus(feedback.pass);
@@ -544,13 +549,15 @@ class RealTimeFeedbackREST {
         const scoreCircle = document.querySelector('.score-circle');
         if (!scoreCircle) return;
         
-        // Update color based on score
-        if (score >= 80) {
-            scoreCircle.style.background = 'linear-gradient(135deg, #48BB78, #38A169)'; // Green
-        } else if (score >= 60) {
-            scoreCircle.style.background = 'linear-gradient(135deg, #ED8936, #DD6B20)'; // Orange
+        // Update color based on 1-5 star rating
+        if (score >= 4) {
+            scoreCircle.style.background = 'linear-gradient(135deg, #48BB78, #38A169)'; // Green (4-5 stars)
+        } else if (score >= 3) {
+            scoreCircle.style.background = 'linear-gradient(135deg, #ECC94B, #D69E2E)'; // Yellow (3 stars)
+        } else if (score >= 2) {
+            scoreCircle.style.background = 'linear-gradient(135deg, #ED8936, #DD6B20)'; // Orange (2 stars)
         } else {
-            scoreCircle.style.background = 'linear-gradient(135deg, #F56565, #E53E3E)'; // Red
+            scoreCircle.style.background = 'linear-gradient(135deg, #F56565, #E53E3E)'; // Red (1 star)
         }
     }
     

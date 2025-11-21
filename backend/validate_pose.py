@@ -3,7 +3,7 @@ PT Pal – Pose Validator
 
 This module scores common rehab poses given pre-computed joint angles/metrics
 (e.g., from BlazePose). It is model-agnostic: you pass angles/distances you
-already computed and it returns a score (0–100), pass/fail, and concrete cues.
+already computed and it returns a score (1–5 stars), pass/fail, and concrete cues.
 
 Input schema
 ------------
@@ -90,7 +90,7 @@ class Thresholds:
 @dataclass
 class PoseResult:
     pose: str
-    score: int  # 0–100
+    score: int  # 1–5 (star rating)
     pass_fail: bool
     reasons: List[str]
     metrics: Dict[str, float]
@@ -98,9 +98,27 @@ class PoseResult:
 
 
 def _score_from_flags(total_checks: int, fails: int) -> int:
-    # Base score on proportion of checks that pass, scaled to 100.
+    """
+    Convert pass/fail checks to a 1-5 star rating.
+    - 100% pass (0 fails) = 5 stars
+    - 80%+ pass = 4 stars
+    - 60%+ pass = 3 stars
+    - 40%+ pass = 2 stars
+    - Below 40% = 1 star
+    """
     passed = max(0, total_checks - fails)
-    return int(round(100 * passed / max(1, total_checks)))
+    pass_percentage = passed / max(1, total_checks)
+    
+    if pass_percentage >= 1.0:
+        return 5
+    elif pass_percentage >= 0.8:
+        return 4
+    elif pass_percentage >= 0.6:
+        return 3
+    elif pass_percentage >= 0.4:
+        return 2
+    else:
+        return 1
 
 
 def _bool_fail(condition: bool, msg: str, reasons: List[str]) -> int:
