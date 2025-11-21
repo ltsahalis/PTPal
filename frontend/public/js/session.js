@@ -352,21 +352,21 @@ class RealTimeFeedbackREST {
     
     initializeEventListeners() {
         if (this.poseTypeSelect) {
-            this.poseTypeSelect.addEventListener('change', (e) => {
-                this.currentPoseType = e.target.value;
-            });
+        this.poseTypeSelect.addEventListener('change', (e) => {
+            this.currentPoseType = e.target.value;
+        });
         }
         
         if (this.startFeedbackBtn) {
-            this.startFeedbackBtn.addEventListener('click', () => {
-                this.startRealTimeFeedback();
-            });
+        this.startFeedbackBtn.addEventListener('click', () => {
+            this.startRealTimeFeedback();
+        });
         }
         
         if (this.stopFeedbackBtn) {
-            this.stopFeedbackBtn.addEventListener('click', () => {
-                this.stopRealTimeFeedback();
-            });
+        this.stopFeedbackBtn.addEventListener('click', () => {
+            this.stopRealTimeFeedback();
+        });
         }
     }
     
@@ -379,7 +379,7 @@ class RealTimeFeedbackREST {
         
         this.isActive = true;
         if (this.poseTypeSelect) {
-            this.currentPoseType = this.poseTypeSelect.value;
+        this.currentPoseType = this.poseTypeSelect.value;
         }
         
         // Update UI
@@ -401,8 +401,8 @@ class RealTimeFeedbackREST {
                         this.showError('Real-time feedback is offline. Enable the PT backend and press Start again.');
                         this.stopRealTimeFeedback(true);
                     } else {
-                        console.error('Error getting feedback:', error);
-                        this.showError('Error getting feedback: ' + error.message);
+                    console.error('Error getting feedback:', error);
+                    this.showError('Error getting feedback: ' + error.message);
                     }
                 }
             }
@@ -428,7 +428,7 @@ class RealTimeFeedbackREST {
         if (this.poseTypeSelect) this.poseTypeSelect.disabled = false;
         
         if (!preserveDisplay) {
-            this.clearFeedback();
+        this.clearFeedback();
         }
         
         console.log('Stopped real-time feedback');
@@ -448,26 +448,26 @@ class RealTimeFeedbackREST {
         
         try {
             const response = await fetch(`${this.apiBaseUrl}/api/validate-pose`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    pose_type: poseType,
-                    landmarks: results.poseLandmarks
-                })
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                pose_type: poseType,
+                landmarks: results.poseLandmarks
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
             
             if (this.backendUnavailable) {
                 this.backendUnavailable = false;
                 this.backendWarningShown = false;
             }
-            
-            return await response.json();
+        
+        return await response.json();
         } catch (error) {
             if (!this.backendWarningShown) {
                 console.warn('Unable to reach PT backend for feedback:', error.message);
@@ -547,7 +547,7 @@ class RealTimeFeedbackREST {
         this.passStatus.className = 'pass-indicator neutral';
         this.feedbackList.innerHTML = '<li>Select a pose type and start feedback to begin</li>';
         if (this.metricsDisplay) {
-            this.metricsDisplay.innerHTML = '<p>No metrics available yet</p>';
+        this.metricsDisplay.innerHTML = '<p>No metrics available yet</p>';
         }
         
         // Reset score circle color
@@ -564,7 +564,7 @@ class RealTimeFeedbackREST {
     // Method to enable/disable feedback based on camera status
     setCameraStatus(isStreaming) {
         if (this.startFeedbackBtn) {
-            this.startFeedbackBtn.disabled = !isStreaming;
+        this.startFeedbackBtn.disabled = !isStreaming;
         }
         if (!isStreaming) {
             this.stopRealTimeFeedback();
@@ -578,6 +578,7 @@ class WebcamManager {
         this.canvas = document.getElementById('output-canvas');
         this.ctx = this.canvas.getContext('2d');
         this.statusText = document.getElementById('status-text');
+        this.sessionStateLabel = document.getElementById('session-state-label');
         this.poseDataOutput = document.getElementById('pose-data-output');
         this.lastUpdate = document.getElementById('last-update');
         this.nextUpdate = document.getElementById('next-update');
@@ -608,6 +609,8 @@ class WebcamManager {
         this.isOutOfFrame = false;
         this.isPartiallyOut = false;
         this.webcamContainer = document.querySelector('.webcam-container');
+        this.stage = document.querySelector('.webcam-stage');
+        this.resizeObserver = null;
         
         // Detection parameters (adapted from Python script)
         this.EDGE_MARGIN = 60;        // outer guide box
@@ -712,8 +715,8 @@ waitForMediaPipe() {
             return;
         }
         await this.startWebcam();
-    }
-    
+}
+
     
     async startWebcam() {
         if (this.isStreaming) {
@@ -721,43 +724,43 @@ waitForMediaPipe() {
         }
         
         return new Promise(async (resolve, reject) => {
-            try {
+        try {
                 this.updateStatus('Starting camera...', 'loading');
-                
-                const newSessionId = this.createNewSession();
-                this.notifyNewSession(newSessionId);
-                
+            
+            const newSessionId = this.createNewSession();
+            this.notifyNewSession(newSessionId);
+            
                 if (!this.permissionGranted) {
                     await this.requestCameraPermission();
                 }
                 
-                this.stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        width: { ideal: 640 },
-                        height: { ideal: 480 },
-                        facingMode: 'user'
-                    },
-                    audio: false
-                });
+            this.stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: 'user'
+                },
+                audio: false
+            });
+            
+            this.video.srcObject = this.stream;
+            
+            this.video.onloadedmetadata = () => {
+                this.video.play();
+                this.setupCanvas();
+                this.isStreaming = true;
+                this.updateStatus('Camera active - BlazePose running', 'success');
                 
-                this.video.srcObject = this.stream;
-                
-                this.video.onloadedmetadata = () => {
-                    this.video.play();
-                    this.setupCanvas();
-                    this.isStreaming = true;
-                    this.updateStatus('Camera active - BlazePose running', 'success');
-                    
-                    this.feedbackSystem.setCameraStatus(true);
-                    this.initializeCamera();
-                    this.startUpdateTimer();
+                this.feedbackSystem.setCameraStatus(true);
+                this.initializeCamera();
+                this.startUpdateTimer();
                     resolve();
-                };
-            } catch (error) {
-                console.error('Error accessing camera:', error);
-                this.handleCameraError(error);
+            };
+        } catch (error) {
+            console.error('Error accessing camera:', error);
+            this.handleCameraError(error);
                 reject(error);
-            }
+        }
         });
     }
     
@@ -806,14 +809,14 @@ waitForMediaPipe() {
     drawPoseLandmarks(landmarks) {
         this.ctx.fillStyle = '#7ED321';
         this.ctx.strokeStyle = '#7ED321';
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = 0.75;
         
         landmarks.forEach((landmark, index) => {
             const x = landmark.x * this.canvas.width;
             const y = landmark.y * this.canvas.height;
             
             this.ctx.beginPath();
-            this.ctx.arc(x, y, 4, 0, 2 * Math.PI);
+            this.ctx.arc(x, y, 3, 0, 2 * Math.PI);
             this.ctx.fill();
             
             // Add landmark index for debugging
@@ -848,7 +851,7 @@ waitForMediaPipe() {
         ];
         
         this.ctx.strokeStyle = '#4A90E2';
-        this.ctx.lineWidth = this.canvas.width/20;
+        this.ctx.lineWidth = Math.max(2, this.canvas.width / 140);
         
         connections.forEach(([start, end]) => {
             if (landmarks[start] && landmarks[end]) {
@@ -1017,13 +1020,13 @@ waitForMediaPipe() {
         
         // Reset pose data display
         if (this.poseDataOutput) {
-            this.poseDataOutput.textContent = 'No pose data available yet. Start the camera to begin pose estimation.';
+        this.poseDataOutput.textContent = 'No pose data available yet. Start the camera to begin pose estimation.';
         }
         if (this.lastUpdate) {
-            this.lastUpdate.textContent = 'Never';
+        this.lastUpdate.textContent = 'Never';
         }
         if (this.nextUpdate) {
-            this.nextUpdate.textContent = '--';
+        this.nextUpdate.textContent = '--';
         }
         this.lastPoseData = null;
         
@@ -1036,38 +1039,86 @@ waitForMediaPipe() {
         
         // Reset webcam container border
         this.webcamContainer.classList.remove('in-frame', 'partially-out', 'out-of-frame');
+
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
+
     }
     
     setupCanvas() {
-        // Set canvas size to match video
+        if (!this.video.videoWidth || !this.video.videoHeight) {
+            return;
+        }
+
         this.canvas.width = this.video.videoWidth;
         this.canvas.height = this.video.videoHeight;
-        
-        // Position canvas over video
-        const rect = this.video.getBoundingClientRect();
+
+        // Stage keeps fixed 16:9 aspect ratio via CSS
+
+        this.matchCanvasToStage();
+        this.observeStageResize();
+    }
+
+    matchCanvasToStage() {
+        if (!this.stage) {
+            return;
+        }
+
+        const rect = this.stage.getBoundingClientRect();
+        const scale = window.devicePixelRatio || 1;
+        const needResize =
+            Math.round(this.canvas.width / scale) !== Math.round(rect.width) ||
+            Math.round(this.canvas.height / scale) !== Math.round(rect.height);
+
+        if (needResize) {
+            this.canvas.width = rect.width * scale;
+            this.canvas.height = rect.height * scale;
+        }
+
+        this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
         this.canvas.style.width = rect.width + 'px';
         this.canvas.style.height = rect.height + 'px';
+        this.video.style.width = rect.width + 'px';
+        this.video.style.height = rect.height + 'px';
+    }
+
+    observeStageResize() {
+        if (!window.ResizeObserver || !this.stage || this.resizeObserver) {
+            return;
+        }
+
+        this.resizeObserver = new ResizeObserver(() => this.matchCanvasToStage());
+        this.resizeObserver.observe(this.stage);
     }
     
     updateStatus(message, type = 'info') {
-        this.statusText.textContent = message;
-        this.statusText.className = '';
+        if (this.statusText) {
+            this.statusText.textContent = message;
+            this.statusText.className = '';
+        }
+        if (this.sessionStateLabel) {
+            this.sessionStateLabel.textContent = message;
+        }
         
         switch (type) {
             case 'loading':
-                this.statusText.innerHTML = `<span class="loading"></span>${message}`;
+                if (this.statusText) {
+                    this.statusText.innerHTML = `<span class="loading"></span>${message}`;
+                }
                 break;
             case 'success':
-                this.statusText.style.color = '#7ED321';
+                if (this.statusText) this.statusText.style.color = '#7ED321';
                 break;
             case 'error':
-                this.statusText.style.color = '#E53E3E';
+                if (this.statusText) this.statusText.style.color = '#E53E3E';
                 break;
             case 'warning':
-                this.statusText.style.color = '#FFA500';
+                if (this.statusText) this.statusText.style.color = '#FFA500';
                 break;
             case 'info':
-                this.statusText.style.color = '#4A90E2';
+                if (this.statusText) this.statusText.style.color = '#4A90E2';
                 break;
         }
     }
@@ -1140,7 +1191,7 @@ waitForMediaPipe() {
         // Check visibility ratio
         const visibilityRatio = this.calculateVisibilityRatio(x, y, width, height, canvasWidth, canvasHeight);
         if (this.ENABLE_FRAME_DEBUG) {
-            console.log('Visibility ratio:', visibilityRatio, 'Threshold:', this.VIS_THRESH);
+        console.log('Visibility ratio:', visibilityRatio, 'Threshold:', this.VIS_THRESH);
         }
         
         const visibilityIssue = visibilityRatio < this.VIS_THRESH;
@@ -1151,12 +1202,12 @@ waitForMediaPipe() {
         }
         
         if (this.ENABLE_FRAME_DEBUG) {
-            console.log('Final frame status:', {
-                isPartiallyOut: this.isPartiallyOut,
-                sidesCrossed: sidesCrossed,
-                sideCounts: this.sideCounts,
-                visibilityRatio: visibilityRatio
-            });
+        console.log('Final frame status:', {
+            isPartiallyOut: this.isPartiallyOut,
+            sidesCrossed: sidesCrossed,
+            sideCounts: this.sideCounts,
+            visibilityRatio: visibilityRatio
+        });
         }
         
         this.isOutOfFrame = false;
@@ -1200,15 +1251,15 @@ waitForMediaPipe() {
         // Debug the bottom check specifically
         const bottomCheck = y + height > canvasHeight - this.SAFE_MARGIN;
         if (this.ENABLE_FRAME_DEBUG) {
-            console.log('Bottom check debug:', {
-                y: y,
-                height: height,
-                yPlusHeight: y + height,
-                canvasHeight: canvasHeight,
-                safeMargin: this.SAFE_MARGIN,
-                threshold: canvasHeight - this.SAFE_MARGIN,
-                bottomCrossed: bottomCheck
-            });
+        console.log('Bottom check debug:', {
+            y: y,
+            height: height,
+            yPlusHeight: y + height,
+            canvasHeight: canvasHeight,
+            safeMargin: this.SAFE_MARGIN,
+            threshold: canvasHeight - this.SAFE_MARGIN,
+            bottomCrossed: bottomCheck
+        });
         }
         
         if (x < this.SAFE_MARGIN) sides.push('left');
@@ -1353,7 +1404,7 @@ class GuidedSessionModal {
         this.floatingPauseBtn = document.getElementById('floating-pause-btn');
         this.floatingStopBtn = document.getElementById('floating-stop-btn');
         
-        this.exerciseDuration = 10;
+        this.exerciseDuration = 30;
         this.state = 'permission';
         this.currentExercise = this.exerciseSelect ? this.exerciseSelect.value : 'partial_squat';
         this.remainingSeconds = this.exerciseDuration;
@@ -1361,12 +1412,12 @@ class GuidedSessionModal {
         this.homeTarget = '/';
         
         this.exerciseInstructions = {
-            partial_squat: 'Do a partial squat for 10 seconds.',
-            heel_raises: 'Rise onto your toes for 10 seconds.',
-            single_leg_stance: 'Hold a single-leg stance for 10 seconds.',
-            tandem_stance: 'Stand heel-to-toe for 10 seconds.',
-            functional_reach: 'Reach forward in a controlled motion for 10 seconds.',
-            tree_pose: 'Hold a steady tree pose for 10 seconds.'
+            partial_squat: 'Do a partial squat for 30 seconds.',
+            heel_raises: 'Rise onto your toes for 30 seconds.',
+            single_leg_stance: 'Hold a single-leg stance for 30 seconds.',
+            tandem_stance: 'Stand heel-to-toe for 30 seconds.',
+            functional_reach: 'Reach forward in a controlled motion for 30 seconds.',
+            tree_pose: 'Hold a steady tree pose for 30 seconds.'
         };
         
         if (this.exerciseSelect) {
@@ -1415,7 +1466,7 @@ class GuidedSessionModal {
         this.setActions({
             primaryText: 'Start Session',
             secondaryHidden: true,
-            homeVisible: false
+            homeVisible: true
         });
     }
     
@@ -1431,7 +1482,7 @@ class GuidedSessionModal {
         this.setActions({
             primaryText: 'Start Session',
             secondaryText: 'Back',
-            homeVisible: false
+            homeVisible: true
         });
     }
     
@@ -1471,7 +1522,8 @@ class GuidedSessionModal {
             this.setError('We could not access the camera. Please allow permissions and try again.');
             this.setActions({
                 primaryText: 'Start Session',
-                secondaryText: 'Back'
+                secondaryText: 'Back',
+                homeVisible: true
             });
         } finally {
             if (this.primaryBtn) {
@@ -1492,7 +1544,7 @@ class GuidedSessionModal {
         this.setActions({
             primaryText: 'Resume',
             secondaryText: 'Stop Session',
-            homeVisible: false
+            homeVisible: true
         });
     }
     

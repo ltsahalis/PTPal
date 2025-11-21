@@ -7,74 +7,117 @@
     <link rel="stylesheet" href="/css/session.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="logo-container">
-                <div class="logo-placeholder">
-                    <div class="logo-figure">
-                        <div class="figure-head"></div>
-                        <div class="figure-body-green"></div>
-                        <div class="figure-body-blue"></div>
-                    </div>
+    <!-- Welcome/Onboarding Screen -->
+    <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-content">
+            <div class="welcome-logo">
+                <div class="logo-figure">
+                    <div class="figure-head"></div>
+                    <div class="figure-body-green"></div>
+                    <div class="figure-body-blue"></div>
                 </div>
-                <h1>PTPal Demo</h1>
             </div>
-            <p>Physical Therapy Assistant - Demo</p>
-            <div style="display: flex; gap: 1rem; align-items: center;">
-                <a id="home-btn" href="/" class="btn primary" title="Go Home" style="background: #00a896; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; text-decoration: none;">
-                    Home
-                </a>
-                <button id="restart-tutorial-btn" class="btn tutorial-btn" title="Restart Tutorial">
-                    <span class="tutorial-icon">📚</span>
-                    <span class="tutorial-text">Restart Tutorial</span>
-                </button>
+            <h1>Welcome to PTPal</h1>
+            <p>Your intelligent Physical Therapy Assistant</p>
+            <div class="welcome-buttons">
+                <button id="start-tutorial-btn" class="btn primary">Start Tutorial</button>
+                <button id="skip-tutorial-btn" class="btn secondary">Skip</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tutorial Overlay -->
+    <div id="tutorial-overlay" class="tutorial-overlay" style="display: none;">
+        <div id="tutorial-backdrop" class="tutorial-backdrop"></div>
+        <div id="tutorial-popup" class="tutorial-popup">
+            <div class="tutorial-header">
+                <span class="tutorial-progress" id="tutorial-progress">1 / 6</span>
+                <div class="tutorial-header-actions">
+                    <a href="/" class="tutorial-home-btn">Home</a>
+                    <button id="close-tutorial-btn" class="close-tutorial">×</button>
+                </div>
+            </div>
+            <div class="tutorial-content">
+                <h2 id="tutorial-title">Welcome to PTPal!</h2>
+                <p id="tutorial-description">Let's get started with a quick tour of the app.</p>
+            </div>
+            <div class="tutorial-footer">
+                <button id="prev-tutorial-btn" class="btn secondary" disabled>Previous</button>
+                <button id="next-tutorial-btn" class="btn primary">Next</button>
+                <button id="finish-tutorial-btn" class="btn primary" style="display: none;">Finish</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <header class="session-header">
+            <div class="session-brand">
+                <div class="brand-mark">
+                    <span>PT</span>
+                </div>
+                <div class="brand-copy">
+                    <p class="eyebrow">PTPal Physical Therapy Assistant</p>
+                    <h1>Guided Balance Session</h1>
+                    <p class="subline">Real-time pose validation with actionable coaching</p>
+                </div>
+            </div>
+            <div class="session-header-meta">
+                <div class="meta-card">
+                    <span class="meta-label">Environment</span>
+                    <span class="meta-value">Live Coaching Mode</span>
+                </div>
+                <div class="meta-card">
+                    <span class="meta-label">Status</span>
+                    <span class="meta-value accent" id="session-state-label">Standing by</span>
+                </div>
             </div>
         </header>
-        
+
         <main>
             <div class="webcam-container">
-                <video id="webcam" autoplay playsinline></video>
-                <canvas id="output-canvas"></canvas>
-                <div class="status">
-                    <span id="status-text">Initializing camera...</span>
-                </div>
-            </div>
-
-            <div id="session-floating-panel" class="session-floating-panel hidden">
-                <div class="floating-details">
-                    <div class="floating-exercise">
-                        <p class="floating-label">Current Exercise</p>
-                        <p id="floating-exercise-name" class="floating-exercise-name">Partial Squat</p>
-                    </div>
-                    <div class="floating-timer">
-                        <span class="timer-label">Time Left</span>
-                        <span id="floating-timer">00:10</span>
-                    </div>
-                </div>
-                <div class="floating-actions">
-                    <button id="floating-pause-btn" class="btn secondary">Pause</button>
-                    <button id="floating-stop-btn" class="btn ghost">Stop</button>
-                </div>
-            </div>
-
-            <div class="feedback-container">
-                <h3>Pose Validation & Feedback</h3>
-                <div class="feedback-display">
-                    <div class="score-section">
-                        <div class="score-circle">
-                            <span id="score-value">--</span>
-                            <span class="score-label">Score</span>
-                        </div>
-                        <div class="pass-indicator">
-                            <span id="pass-status">--</span>
+                <div class="webcam-stage">
+                    <div class="stage-overlay stage-overlay--top">
+                        <div id="session-floating-panel" class="session-floating-panel hud-card hidden">
+                            <div class="floating-details">
+                                <div class="floating-exercise">
+                                    <p class="floating-label">Current Exercise</p>
+                                    <p id="floating-exercise-name" class="floating-exercise-name">Partial Squat</p>
+                                </div>
+                                <div class="floating-timer">
+                                    <span class="timer-label">Time Left</span>
+                                    <span id="floating-timer">00:30</span>
+                                </div>
+                            </div>
+                            <div class="floating-actions">
+                                <button id="floating-pause-btn" class="btn secondary">Pause</button>
+                                <button id="floating-stop-btn" class="btn ghost">Stop</button>
+                            </div>
                         </div>
                     </div>
-                    
-                    <div class="feedback-section">
-                        <h4>Real-time Feedback:</h4>
-                        <ul id="feedback-list">
-                            <li>Select a pose type and start feedback to begin</li>
-                        </ul>
+
+                    <video id="webcam" autoplay playsinline></video>
+                    <canvas id="output-canvas"></canvas>
+
+                    <div class="feedback-container hud-card">
+                        <h3>Pose Validation & Feedback</h3>
+                        <div class="feedback-display">
+                            <div class="score-section">
+                                <div class="score-circle">
+                                    <span id="score-value">--</span>
+                                    <span class="score-label">Score</span>
+                                </div>
+                                <div class="pass-indicator">
+                                    <span id="pass-status">--</span>
+                                </div>
+                            </div>
+                            
+                            <div class="feedback-section">
+                                <h4>Tips</h4>
+                                <ul id="feedback-list">
+                                    <li>Select a pose type and start feedback to begin</li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -192,13 +235,13 @@
                     <p id="exercise-instruction">Click Start Session to begin.</p>
                     <div class="session-timer">
                         <span class="timer-label">Timer</span>
-                        <span id="exercise-timer">00:10</span>
+                        <span id="exercise-timer">00:30</span>
                     </div>
                 </div>
             </div>
             
             <div class="session-modal-actions">
-                <button id="session-home-action" class="btn ghost hidden">Return Home</button>
+                <a id="session-home-action" class="btn ghost" href="/">Return Home</a>
                 <button id="session-secondary-action" class="btn secondary ghost">Cancel</button>
                 <button id="session-primary-action" class="btn primary">Continue</button>
             </div>
