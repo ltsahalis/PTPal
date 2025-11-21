@@ -438,8 +438,12 @@ class RealTimeFeedbackREST {
         // Update feedback list
         this.updateFeedbackList(feedback.feedback || []);
         
-        // Update metrics display
-        this.updateMetricsDisplay(feedback.metrics || {});
+        // Display LLM feedback instead of metrics if available
+        if (feedback.llm_feedback) {
+            this.updateLLMFeedbackDisplay(feedback.llm_feedback);
+        } else {
+            this.updateMetricsDisplay(feedback.metrics || {});
+        }
         
         // Add visual feedback based on score
         this.updateScoreIndicator(feedback.score);
@@ -474,6 +478,66 @@ class RealTimeFeedbackREST {
             .join('');
         
         this.metricsDisplay.innerHTML = metricsHtml;
+    }
+    
+    updateLLMFeedbackDisplay(llmFeedback) {
+        if (!llmFeedback) {
+            this.metricsDisplay.innerHTML = '<p>AI feedback not available</p>';
+            return;
+        }
+        
+        let html = '<div class="llm-feedback-container">';
+        
+        // Summary
+        if (llmFeedback.summary) {
+            html += `<div class="llm-summary">
+                <h4>💬 AI Coach Says:</h4>
+                <p>${llmFeedback.summary}</p>
+            </div>`;
+        }
+        
+        // Cues (actionable feedback)
+        if (llmFeedback.cues && llmFeedback.cues.length > 0) {
+            html += '<div class="llm-cues"><h4>🎯 Focus Points:</h4><ul>';
+            llmFeedback.cues.forEach(cue => {
+                html += `<li class="llm-cue">
+                    <strong>${cue.issue}</strong>
+                    <div class="llm-action">👉 ${cue.action}</div>`;
+                if (cue.why_it_matters) {
+                    html += `<div class="llm-why">💡 ${cue.why_it_matters}</div>`;
+                }
+                html += '</li>';
+            });
+            html += '</ul></div>';
+        }
+        
+        // Next rep focus
+        if (llmFeedback.next_rep_focus) {
+            html += `<div class="llm-next-focus">
+                <h4>🔄 Next Rep:</h4>
+                <p>${llmFeedback.next_rep_focus}</p>
+            </div>`;
+        }
+        
+        // Encouragement
+        if (llmFeedback.encouragement) {
+            html += `<div class="llm-encouragement">
+                <h4>💪 Motivation:</h4>
+                <p>${llmFeedback.encouragement}</p>
+            </div>`;
+        }
+        
+        // Safety flags (if any)
+        if (llmFeedback.safety_flags && llmFeedback.safety_flags.length > 0) {
+            html += '<div class="llm-safety"><h4>⚠️ Safety Notes:</h4><ul>';
+            llmFeedback.safety_flags.forEach(flag => {
+                html += `<li>${flag}</li>`;
+            });
+            html += '</ul></div>';
+        }
+        
+        html += '</div>';
+        this.metricsDisplay.innerHTML = html;
     }
     
     updateScoreIndicator(score) {

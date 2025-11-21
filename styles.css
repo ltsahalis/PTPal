@@ -359,6 +359,164 @@ main {
     border: 1px solid #4a5568;
 }
 
+/* LLM Feedback Display */
+.llm-feedback-container {
+    background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+    border-radius: 15px;
+    padding: 20px;
+    margin-top: 10px;
+}
+
+.llm-summary {
+    background: #EBF8FF;
+    border-left: 4px solid #4299E1;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.llm-summary h4 {
+    color: #2C5282;
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.llm-summary p {
+    color: #2D3748;
+    line-height: 1.6;
+    font-size: 0.95rem;
+}
+
+.llm-cues {
+    margin-bottom: 20px;
+}
+
+.llm-cues h4 {
+    color: #48BB78;
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.llm-cues ul {
+    list-style: none;
+    padding: 0;
+}
+
+.llm-cue {
+    background: #F0FFF4;
+    border-left: 4px solid #48BB78;
+    padding: 15px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.llm-cue strong {
+    color: #276749;
+    font-size: 1rem;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.llm-action {
+    color: #2D3748;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 8px;
+    margin: 8px 0;
+    font-size: 0.9rem;
+    border-left: 3px solid #68D391;
+}
+
+.llm-why {
+    color: #4A5568;
+    font-style: italic;
+    font-size: 0.85rem;
+    margin-top: 6px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 6px;
+}
+
+.llm-next-focus {
+    background: #FFFAF0;
+    border-left: 4px solid #ED8936;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+.llm-next-focus h4 {
+    color: #C05621;
+    font-size: 1rem;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.llm-next-focus p {
+    color: #2D3748;
+    line-height: 1.5;
+    font-size: 0.9rem;
+}
+
+.llm-encouragement {
+    background: linear-gradient(135deg, #FED7E2 0%, #FBB6CE 100%);
+    border-left: 4px solid #D53F8C;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.llm-encouragement h4 {
+    color: #97266D;
+    font-size: 1rem;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.llm-encouragement p {
+    color: #2D3748;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.llm-safety {
+    background: #FFF5F5;
+    border-left: 4px solid #F56565;
+    padding: 15px;
+    border-radius: 10px;
+    margin-top: 15px;
+}
+
+.llm-safety h4 {
+    color: #C53030;
+    font-size: 1rem;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.llm-safety ul {
+    list-style: none;
+    padding: 0;
+}
+
+.llm-safety li {
+    color: #742A2A;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    background: white;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.llm-safety li::before {
+    content: '⚠️ ';
+    margin-right: 6px;
+}
+
 /* Footer */
 footer {
     text-align: center;

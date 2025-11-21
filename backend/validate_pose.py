@@ -33,14 +33,23 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Tuple, Optional
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Optional OpenAI integration - only if API key is set
 try:
     from openai import OpenAI
     api_key = os.environ.get('OPENAI_API_KEY')
     client = OpenAI(api_key=api_key) if api_key else None
+    if client:
+        print("✓ OpenAI client initialized successfully")
+    else:
+        print("ℹ OpenAI API key not found. Set OPENAI_API_KEY environment variable to enable AI feedback.")
 except ImportError:
     client = None
+    print("ℹ OpenAI package not installed. Install with: pip install openai")
 
 @dataclass
 class Thresholds:
@@ -440,7 +449,7 @@ LLM_OUTPUT_SCHEMA = {
 }
 
 LLM_SYSTEM_PROMPT = (
-    "You are PT Pal, a physical-therapy coaching assistant. "
+    "You are PT Pal, a physical-therapy coaching assistant for kids age 5-9. "
     "Speak in short, encouraging sentences. Use only the metrics and reasons provided. "
     "Do not make diagnoses or medical claims. Do not invent new measurements. "
     "Return a STRICT JSON object that matches the provided JSON Schema exactly. "
@@ -480,6 +489,45 @@ def build_llm_messages(result: PoseResult, tone: str = "coach", reading_level: s
         {"role": "system", "content": LLM_SYSTEM_PROMPT},
         {"role": "user", "content": user_text},
     ]
+
+
+def get_llm_feedback(result: PoseResult, tone: str = "coach", reading_level: str = "elementary", language: str = "en") -> dict:
+    """Get AI-enhanced feedback from OpenAI for a pose result.
+    
+    Returns a dict with LLM feedback or None if OpenAI is not configured.
+    """
+    if not client:
+        return None
+    
+    try:
+        messages = build_llm_messages(result, tone, reading_level, language)
+        
+        response = client.chat.completions.create(
+            model="gpt-4o",  # gpt-4o supports JSON mode
+            messages=messages,
+            temperature=0.7,
+            max_tokens=500,
+            response_format={"type": "json_object"}  # Ensures JSON output
+        )
+        
+        # Parse the JSON response
+        import json
+        llm_output = json.loads(response.choices[0].message.content)
+        
+        return {
+            "pose": llm_output.get("pose", result.pose),
+            "severity": llm_output.get("severity", "ok"),
+            "summary": llm_output.get("summary", ""),
+            "cues": llm_output.get("cues", []),
+            "next_rep_focus": llm_output.get("next_rep_focus", ""),
+            "encouragement": llm_output.get("encouragement", "Keep going!"),
+            "safety_flags": llm_output.get("safety_flags", []),
+            "confidence": llm_output.get("confidence", 1.0)
+        }
+    
+    except Exception as e:
+        print(f"Error getting LLM feedback: {e}")
+        return None
 
 
 

@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime
 import math
-from validate_pose import evaluate_pose, POSE_DISPATCH
+from validate_pose import evaluate_pose, POSE_DISPATCH, get_llm_feedback
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for cross-origin requests
@@ -468,6 +468,9 @@ def validate_pose_endpoint():
         # Validate using the pose validator
         result = evaluate_pose(validator_key, metrics)
         
+        # Get AI-enhanced feedback from OpenAI (if configured)
+        llm_feedback = get_llm_feedback(result)
+        
         return jsonify({
             "status": "success",
             "pose": result.pose,
@@ -475,7 +478,8 @@ def validate_pose_endpoint():
             "pass": result.pass_fail,
             "feedback": result.reasons,
             "metrics": result.metrics,
-            "all_computed_metrics": metrics  # Show all computed values
+            "all_computed_metrics": metrics,  # Show all computed values
+            "llm_feedback": llm_feedback  # AI-enhanced feedback (None if not configured)
         })
         
     except KeyError as e:
