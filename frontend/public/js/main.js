@@ -55,6 +55,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // Button click handlers
 document.querySelectorAll('.btn-primary, .nav-cta').forEach(button => {
     button.addEventListener('click', (e) => {
+        // Skip if button has onclick handler (let it handle navigation)
+        if (button.getAttribute('onclick')) {
+            return;
+        }
         if (button.textContent.includes('Get Started') || button.textContent.includes('Start')) {
             e.preventDefault();
             // Navigate to exercises page or start session
