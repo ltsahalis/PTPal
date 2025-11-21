@@ -1455,7 +1455,7 @@ class GuidedSessionModal {
         this.currentExercise = this.exerciseSelect ? this.exerciseSelect.value : 'partial_squat';
         this.remainingSeconds = this.exerciseDuration;
         this.timerInterval = null;
-        this.homeTarget = '/';
+        this.homeTarget = '/account.html';
         
         this.exerciseInstructions = {
             partial_squat: 'Do a partial squat for 30 seconds.',
