@@ -84,6 +84,74 @@
                 <button id="stop-btn" class="btn secondary" disabled>Stop Camera</button>
             </div>
             
+            <!-- Video Upload Section -->
+            <div class="video-upload-container">
+                <h3>Upload Video for Analysis</h3>
+                <div class="upload-section">
+                    <input type="file" id="video-upload" accept="video/*" style="display: none;">
+                    <button id="upload-video-btn" class="btn primary">Choose Video</button>
+                    <span id="video-filename" class="filename-display">No file selected</span>
+                </div>
+                
+                <div class="video-analysis-controls" style="display: none;">
+                    <div class="pose-selector">
+                        <label for="video-pose-type-select">Select Pose Type:</label>
+                        <select id="video-pose-type-select">
+                            <option value="partial_squat">Partial Squat</option>
+                            <option value="heel_raises">Heel Raises</option>
+                            <option value="single_leg_stance">Single Leg Stance</option>
+                            <option value="tandem_stance">Tandem Stance</option>
+                            <option value="functional_reach">Functional Reach</option>
+                            <option value="tree_pose">Tree Pose (Auto-detect)</option>
+                            <option value="tree_pose_left">Tree Pose (Left Leg Lifted)</option>
+                            <option value="tree_pose_right">Tree Pose (Right Leg Lifted)</option>
+                        </select>
+                    </div>
+                    <button id="analyze-video-btn" class="btn tertiary">Analyze Video</button>
+                    <button id="cancel-video-btn" class="btn secondary">Cancel</button>
+                </div>
+                
+                <div id="video-analysis-progress" class="analysis-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <span id="progress-text">Processing: 0%</span>
+                </div>
+                
+                <div id="video-playback-container" class="video-playback" style="display: none;">
+                    <video id="analysis-video" controls></video>
+                    <canvas id="analysis-canvas"></canvas>
+                </div>
+                
+                <div id="video-feedback-results" class="video-feedback-results" style="display: none;">
+                    <h4>Video Analysis Results</h4>
+                    <div class="results-summary">
+                        <div class="result-score">
+                            <span class="result-label">Average Score</span>
+                            <span id="avg-score" class="result-value">--</span>
+                        </div>
+                        <div class="result-frames">
+                            <span class="result-label">Frames Analyzed</span>
+                            <span id="frames-analyzed" class="result-value">--</span>
+                        </div>
+                        <div class="result-status">
+                            <span class="result-label">Overall Status</span>
+                            <span id="overall-status" class="result-value">--</span>
+                        </div>
+                    </div>
+                    
+                    <div class="feedback-timeline">
+                        <h5>Feedback Timeline</h5>
+                        <div id="feedback-timeline-content"></div>
+                    </div>
+                    
+                    <div class="common-issues">
+                        <h5>Most Common Issues</h5>
+                        <ul id="common-issues-list"></ul>
+                    </div>
+                </div>
+            </div>
+            
             <div class="feedback-container">
                 <h3>Pose Validation & Feedback</h3>
                 <div class="pose-selector">
@@ -94,7 +162,9 @@
                         <option value="single_leg_stance">Single Leg Stance</option>
                         <option value="tandem_stance">Tandem Stance</option>
                         <option value="functional_reach">Functional Reach</option>
-                        <option value="tree_pose">Tree Pose</option>
+                        <option value="tree_pose">Tree Pose (Auto-detect)</option>
+                        <option value="tree_pose_left">Tree Pose (Left Leg Lifted)</option>
+                        <option value="tree_pose_right">Tree Pose (Right Leg Lifted)</option>
                     </select>
                     <button id="start-feedback-btn" class="btn tertiary" disabled>Start Real-time Feedback</button>
                     <button id="stop-feedback-btn" class="btn tertiary" disabled>Stop Feedback</button>
