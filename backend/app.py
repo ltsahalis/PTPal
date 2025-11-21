@@ -244,9 +244,9 @@ def compute_pose_metrics(pose_type, landmarks):
         right_knee_x_deviation = abs(landmarks[RIGHT_KNEE]['x'] - landmarks[RIGHT_HIP]['x']) * 100
         metrics['hip_knee_ankle_alignment_deg'] = (left_knee_x_deviation + right_knee_x_deviation) / 2
         
-        # Heel height (vertical distance from ankle to heel)
-        left_heel_height = abs(landmarks[LEFT_HEEL]['y'] - landmarks[LEFT_ANKLE]['y']) * 170  # Approx cm
-        right_heel_height = abs(landmarks[RIGHT_HEEL]['y'] - landmarks[RIGHT_ANKLE]['y']) * 170
+        # Heel height (vertical distance from toe to heel)
+        left_heel_height = abs(landmarks[LEFT_HEEL]['y'] - landmarks[LEFT_TOE]['y']) * 170  # Approx cm
+        right_heel_height = abs(landmarks[RIGHT_HEEL]['y'] - landmarks[RIGHT_TOE]['y']) * 170
         metrics['heel_height_cm'] = (left_heel_height + right_heel_height) / 2
         
         # Trunk forward lean (angle from vertical)
@@ -282,13 +282,28 @@ def compute_pose_metrics(pose_type, landmarks):
             pass
         
         elif pose_type == 'heel_raises':
-            # Already have: heel_height_cm, symmetry_diff_pct, ankle_roll_deg
+            # Already have: heel_height_cm, symmetry_diff_pct, ankle_roll_deg, trunk_forward_lean_deg
             pass
         
-        elif pose_type in ['single_leg_stance', 'tree_pose']:
-            # Hold time and sway need temporal data - set defaults
-            metrics['hold_time_s'] = 0  # Must be tracked over time
-            metrics['sway_peak_deg'] = 0  # Must be tracked over time
+        elif pose_type in ['single_leg_stance', 'tree_pose', 'tree_pose_left', 'tree_pose_right']:
+            # Calculate sway as hip-shoulder alignment (horizontal deviation)
+            # Mid-shoulder and mid-hip x-coordinates
+            mid_shoulder_x_sway = (landmarks[LEFT_SHOULDER]['x'] + landmarks[RIGHT_SHOULDER]['x']) / 2
+            mid_hip_x_sway = (landmarks[LEFT_HIP]['x'] + landmarks[RIGHT_HIP]['x']) / 2
+            
+            # Calculate horizontal deviation as an angle approximation
+            # Using the vertical distance between shoulders and hips as reference
+            mid_shoulder_y_sway = (landmarks[LEFT_SHOULDER]['y'] + landmarks[RIGHT_SHOULDER]['y']) / 2
+            mid_hip_y_sway = (landmarks[LEFT_HIP]['y'] + landmarks[RIGHT_HIP]['y']) / 2
+            vertical_dist = abs(mid_shoulder_y_sway - mid_hip_y_sway)
+            horizontal_dist = abs(mid_shoulder_x_sway - mid_hip_x_sway)
+            
+            if vertical_dist > 0:
+                # Calculate angle in degrees (arctan of horizontal/vertical deviation)
+                sway_angle_rad = math.atan2(horizontal_dist, vertical_dist)
+                metrics['sway_peak_deg'] = math.degrees(sway_angle_rad)
+            else:
+                metrics['sway_peak_deg'] = 0
             
             # Arm overhead alignment (for tree pose)
             if landmarks[LEFT_WRIST]['y'] < landmarks[LEFT_SHOULDER]['y'] and landmarks[RIGHT_WRIST]['y'] < landmarks[RIGHT_SHOULDER]['y']:
@@ -296,15 +311,99 @@ def compute_pose_metrics(pose_type, landmarks):
                 metrics['arm_overhead_alignment_deg'] = wrist_height_diff * 100
             else:
                 metrics['arm_overhead_alignment_deg'] = 20  # Arms not raised
+            
+            # Leg lift detection (for tree pose)
+            # Check if one ankle is lifted significantly higher than the other
+            left_ankle_y = landmarks[LEFT_ANKLE]['y']
+            right_ankle_y = landmarks[RIGHT_ANKLE]['y']
+            ankle_height_diff = abs(left_ankle_y - right_ankle_y)
+            
+            # Convert to approximate cm (lower y = higher on screen = lifted)
+            # If one ankle is higher (lower y value), that leg is lifted
+            metrics['leg_lift_height_cm'] = ankle_height_diff * 170  # Approx conversion to cm
+            
+            # Determine which leg is lifted (for specific left/right tree pose validation)
+            # Lower y value = higher on screen = lifted leg
+            if left_ankle_y < right_ankle_y:
+                # Left leg is lifted (standing on right leg)
+                metrics['lifted_leg'] = 'left'
+                metrics['standing_leg'] = 'right'
+            else:
+                # Right leg is lifted (standing on left leg)
+                metrics['lifted_leg'] = 'right'
+                metrics['standing_leg'] = 'left'
         
         elif pose_type == 'tandem_stance':
-            # Foot line deviation (heel-to-toe alignment)
-            # Check if feet are in line (front foot heel close to back foot toe)
-            front_heel_x = landmarks[LEFT_HEEL]['x']  # Assume left is front
-            back_toe_x = landmarks[RIGHT_TOE]['x']
-            foot_deviation = abs(front_heel_x - back_toe_x) * 100
-            metrics['foot_line_deviation_deg'] = foot_deviation
-            metrics['hold_time_s'] = 0  # Must be tracked over time
+            # Store all four x coordinates for visualization
+            left_heel_x = landmarks[LEFT_HEEL]['x']
+            left_toe_x = landmarks[LEFT_TOE]['x']
+            right_heel_x = landmarks[RIGHT_HEEL]['x']
+            right_toe_x = landmarks[RIGHT_TOE]['x']
+            
+            metrics['left_heel_x'] = left_heel_x
+            metrics['left_toe_x'] = left_toe_x
+            metrics['right_heel_x'] = right_heel_x
+            metrics['right_toe_x'] = right_toe_x
+            
+            # Find the rightmost point among all four
+            foot_points = {
+                'left_toe': left_toe_x,
+                'left_heel': left_heel_x,
+                'right_toe': right_toe_x,
+                'right_heel': right_heel_x
+            }
+            rightmost_point = max(foot_points, key=foot_points.get)
+            metrics['rightmost_point'] = rightmost_point
+            
+            # Determine which points to measure based on rightmost point
+            if rightmost_point == 'left_toe':
+                # Left foot is in front, measure left heel to right toe
+                point1_x = left_heel_x
+                point1_y = landmarks[LEFT_HEEL]['y']
+                point2_x = right_toe_x
+                point2_y = landmarks[RIGHT_TOE]['y']
+                metrics['measured_points'] = 'left_heel to right_toe'
+            elif rightmost_point == 'right_toe':
+                # Right foot is in front, measure right heel to left toe
+                point1_x = right_heel_x
+                point1_y = landmarks[RIGHT_HEEL]['y']
+                point2_x = left_toe_x
+                point2_y = landmarks[LEFT_TOE]['y']
+                metrics['measured_points'] = 'right_heel to left_toe'
+            elif rightmost_point == 'left_heel':
+                # Left foot is in front (heel forward), measure left toe to right heel
+                point1_x = left_toe_x
+                point1_y = landmarks[LEFT_TOE]['y']
+                point2_x = right_heel_x
+                point2_y = landmarks[RIGHT_HEEL]['y']
+                metrics['measured_points'] = 'left_toe to right_heel'
+            else:  # right_heel
+                # Right foot is in front (heel forward), measure right toe to left heel
+                point1_x = right_toe_x
+                point1_y = landmarks[RIGHT_TOE]['y']
+                point2_x = left_heel_x
+                point2_y = landmarks[LEFT_HEEL]['y']
+                metrics['measured_points'] = 'right_toe to left_heel'
+            
+            # Calculate foot line deviation
+            horizontal_dist = abs(point1_x - point2_x)
+            vertical_dist = abs(point1_y - point2_y)
+            foot_distance = math.sqrt(horizontal_dist**2 + vertical_dist**2)
+            metrics['foot_line_deviation_cm'] = foot_distance * 170  # Convert to cm
+            
+            # Head-to-feet alignment (nose to midpoint of feet)
+            mid_foot_x = (landmarks[LEFT_ANKLE]['x'] + landmarks[RIGHT_ANKLE]['x']) / 2
+            mid_foot_y = (landmarks[LEFT_ANKLE]['y'] + landmarks[RIGHT_ANKLE]['y']) / 2
+            nose_x = landmarks[0]['x']
+            nose_y = landmarks[0]['y']
+            horizontal_deviation = abs(nose_x - mid_foot_x)
+            vertical_dist = abs(nose_y - mid_foot_y)
+            
+            if vertical_dist > 0:
+                head_feet_angle_rad = math.atan2(horizontal_deviation, vertical_dist)
+                metrics['head_feet_alignment_deg'] = math.degrees(head_feet_angle_rad)
+            else:
+                metrics['head_feet_alignment_deg'] = 0
         
         elif pose_type == 'functional_reach':
             # Reach distance ratio (forward reach distance / arm length)
@@ -349,7 +448,9 @@ def validate_pose_endpoint():
             'single_leg': 'single_leg_stance',
             'tandem': 'tandem_stance',
             'reach': 'functional_reach',
-            'tree': 'tree_pose'
+            'tree': 'tree_pose',
+            'tree_left': 'tree_pose_left',
+            'tree_right': 'tree_pose_right'
         }
         
         # Convert to validator key

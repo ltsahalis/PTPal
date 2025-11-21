@@ -1240,6 +1240,569 @@ waitForMediaPipe() {
     }
 }
 
+// Video Analyzer for uploaded videos
+class VideoAnalyzer {
+    constructor() {
+        this.uploadBtn = document.getElementById('upload-video-btn');
+        this.videoInput = document.getElementById('video-upload');
+        this.filenameDisplay = document.getElementById('video-filename');
+        this.analysisControls = document.querySelector('.video-analysis-controls');
+        this.poseTypeSelect = document.getElementById('video-pose-type-select');
+        this.analyzeBtn = document.getElementById('analyze-video-btn');
+        this.cancelBtn = document.getElementById('cancel-video-btn');
+        this.progressContainer = document.getElementById('video-analysis-progress');
+        this.progressFill = document.getElementById('progress-fill');
+        this.progressText = document.getElementById('progress-text');
+        this.playbackContainer = document.getElementById('video-playback-container');
+        this.analysisVideo = document.getElementById('analysis-video');
+        this.analysisCanvas = document.getElementById('analysis-canvas');
+        this.feedbackResults = document.getElementById('video-feedback-results');
+        
+        this.selectedFile = null;
+        this.pose = null;
+        this.isAnalyzing = false;
+        this.frameResults = [];
+        
+        this.initializeEventListeners();
+        this.initializePose();
+    }
+    
+    initializeEventListeners() {
+        this.uploadBtn.addEventListener('click', () => {
+            this.videoInput.click();
+        });
+        
+        this.videoInput.addEventListener('change', (e) => {
+            this.handleFileSelection(e);
+        });
+        
+        this.analyzeBtn.addEventListener('click', () => {
+            this.startAnalysis();
+        });
+        
+        this.cancelBtn.addEventListener('click', () => {
+            this.cancelUpload();
+        });
+    }
+    
+    async initializePose() {
+        try {
+            // Wait for MediaPipe to be available
+            await this.waitForMediaPipe();
+            
+            this.pose = new Pose({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`;
+                }
+            });
+            
+            this.pose.setOptions({
+                modelComplexity: 2,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                smoothSegmentation: false,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            console.log('Video analyzer pose model initialized');
+        } catch (error) {
+            console.error('Error initializing pose for video analyzer:', error);
+        }
+    }
+    
+    waitForMediaPipe() {
+        return new Promise((resolve, reject) => {
+            let attempts = 0;
+            const maxAttempts = 200;
+            const check = () => {
+                attempts++;
+                const hasPose = typeof window.Pose !== 'undefined';
+                if (hasPose) {
+                    resolve();
+                } else if (attempts >= maxAttempts) {
+                    reject(new Error('MediaPipe failed to load'));
+                } else {
+                    setTimeout(check, 100);
+                }
+            };
+            check();
+        });
+    }
+    
+    handleFileSelection(event) {
+        const file = event.target.files[0];
+        if (file && file.type.startsWith('video/')) {
+            this.selectedFile = file;
+            this.filenameDisplay.textContent = file.name;
+            this.analysisControls.style.display = 'flex';
+            
+            // Load video for preview
+            const videoUrl = URL.createObjectURL(file);
+            this.analysisVideo.src = videoUrl;
+            this.playbackContainer.style.display = 'block';
+        } else {
+            alert('Please select a valid video file');
+        }
+    }
+    
+    cancelUpload() {
+        this.selectedFile = null;
+        this.filenameDisplay.textContent = 'No file selected';
+        this.analysisControls.style.display = 'none';
+        this.playbackContainer.style.display = 'none';
+        this.progressContainer.style.display = 'none';
+        this.feedbackResults.style.display = 'none';
+        this.videoInput.value = '';
+        this.analysisVideo.src = '';
+    }
+    
+    async startAnalysis() {
+        if (!this.selectedFile || this.isAnalyzing) return;
+        
+        this.isAnalyzing = true;
+        this.frameResults = [];
+        this.analyzeBtn.disabled = true;
+        this.cancelBtn.disabled = true;
+        this.progressContainer.style.display = 'block';
+        this.feedbackResults.style.display = 'none';
+        
+        const poseType = this.poseTypeSelect.value;
+        
+        try {
+            await this.processVideo(poseType);
+            this.displayResults();
+        } catch (error) {
+            console.error('Error analyzing video:', error);
+            alert('Error analyzing video: ' + error.message);
+        } finally {
+            this.isAnalyzing = false;
+            this.analyzeBtn.disabled = false;
+            this.cancelBtn.disabled = false;
+            this.progressContainer.style.display = 'none';
+        }
+    }
+    
+    async processVideo(poseType) {
+        const video = this.analysisVideo;
+        const canvas = this.analysisCanvas;
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        
+        // Calculate sampling rate (process every Nth frame)
+        const fps = 30; // Assume 30 fps
+        const sampleRate = 5; // Process every 5th frame (6 fps)
+        const frameDuration = 1000 / fps;
+        
+        video.currentTime = 0;
+        const duration = video.duration;
+        const totalFrames = Math.floor(duration * fps / sampleRate);
+        
+        let frameCount = 0;
+        
+        return new Promise((resolve, reject) => {
+            const processFrame = async () => {
+                if (video.currentTime >= duration) {
+                    resolve();
+                    return;
+                }
+                
+                try {
+                    // Send frame to pose estimation
+                    await this.pose.send({ image: video });
+                    
+                    // Get pose result and validate
+                    const poseResult = await this.getPoseResult(video);
+                    
+                    if (poseResult && poseResult.poseLandmarks) {
+                        // Validate this frame
+                        const feedback = await this.validateFrame(poseType, poseResult.poseLandmarks);
+                        
+                        this.frameResults.push({
+                            timestamp: video.currentTime,
+                            feedback: feedback,
+                            landmarks: poseResult.poseLandmarks
+                        });
+                        
+                        // Draw pose on canvas
+                        this.drawPoseOnCanvas(ctx, canvas, poseResult.poseLandmarks);
+                    }
+                    
+                    frameCount++;
+                    const progress = Math.round((frameCount / totalFrames) * 100);
+                    this.updateProgress(progress);
+                    
+                    // Move to next sample frame
+                    video.currentTime += (sampleRate * frameDuration) / 1000;
+                    
+                    // Continue processing
+                    setTimeout(() => processFrame(), 10);
+                    
+                } catch (error) {
+                    console.error('Error processing frame:', error);
+                    // Continue to next frame even if there's an error
+                    video.currentTime += (sampleRate * frameDuration) / 1000;
+                    setTimeout(() => processFrame(), 10);
+                }
+            };
+            
+            video.onseeked = () => {
+                processFrame();
+                video.onseeked = null;
+            };
+            
+            video.onerror = reject;
+        });
+    }
+    
+    async getPoseResult(video) {
+        return new Promise((resolve) => {
+            this.pose.onResults((results) => {
+                resolve(results);
+            });
+            this.pose.send({ image: video });
+        });
+    }
+    
+    async validateFrame(poseType, landmarks) {
+        try {
+            const response = await fetch('https://localhost:8001/api/validate-pose', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    pose_type: poseType,
+                    landmarks: landmarks
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('Error validating frame:', error);
+            return null;
+        }
+    }
+    
+    drawPoseOnCanvas(ctx, canvas, landmarks) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw connections
+        const connections = [
+            [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
+            [11, 23], [12, 24], [23, 24],
+            [23, 25], [25, 27], [24, 26], [26, 28]
+        ];
+        
+        ctx.strokeStyle = '#4A90E2';
+        ctx.lineWidth = 3;
+        
+        connections.forEach(([start, end]) => {
+            if (landmarks[start] && landmarks[end]) {
+                ctx.beginPath();
+                ctx.moveTo(
+                    landmarks[start].x * canvas.width,
+                    landmarks[start].y * canvas.height
+                );
+                ctx.lineTo(
+                    landmarks[end].x * canvas.width,
+                    landmarks[end].y * canvas.height
+                );
+                ctx.stroke();
+            }
+        });
+        
+        // Draw landmarks
+        ctx.fillStyle = '#7ED321';
+        landmarks.forEach((landmark) => {
+            const x = landmark.x * canvas.width;
+            const y = landmark.y * canvas.height;
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+    }
+    
+    updateProgress(percent) {
+        this.progressFill.style.width = `${percent}%`;
+        this.progressText.textContent = `Processing: ${percent}%`;
+    }
+    
+    displayResults() {
+        if (this.frameResults.length === 0) {
+            alert('No pose data detected in video. Make sure the person is clearly visible.');
+            return;
+        }
+        
+        // Calculate statistics
+        const scores = this.frameResults
+            .filter(r => r.feedback && r.feedback.score !== undefined)
+            .map(r => r.feedback.score);
+        
+        const avgScore = scores.length > 0 
+            ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+            : 0;
+        
+        const passCount = this.frameResults.filter(r => r.feedback && r.feedback.pass).length;
+        const failCount = this.frameResults.length - passCount;
+        const overallStatus = passCount > failCount ? 'PASS' : 'FAIL';
+        
+        // Calculate video duration in seconds
+        const videoDuration = Math.ceil(Math.max(...this.frameResults.map(r => r.timestamp)));
+        
+        // Update summary
+        document.getElementById('avg-score').textContent = avgScore;
+        document.getElementById('frames-analyzed').textContent = `${this.frameResults.length} frames (${videoDuration}s video)`;
+        document.getElementById('overall-status').textContent = overallStatus;
+        document.getElementById('overall-status').className = 
+            'result-value ' + (overallStatus === 'PASS' ? 'pass' : 'fail');
+        
+        // Display timeline with info
+        this.displayTimeline(videoDuration);
+        
+        // Display common issues
+        this.displayCommonIssues();
+        
+        // Show results
+        this.feedbackResults.style.display = 'block';
+        
+        // Scroll to results
+        this.feedbackResults.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    
+    displayTimeline(videoDuration) {
+        const timelineContent = document.getElementById('feedback-timeline-content');
+        timelineContent.innerHTML = '';
+        
+        // Add info header
+        const infoHeader = document.createElement('div');
+        infoHeader.className = 'timeline-info-header';
+        infoHeader.innerHTML = `
+            <span class="timeline-info-icon">📊</span>
+            <span class="timeline-info-text">Showing feedback for every second of the ${videoDuration}s video</span>
+        `;
+        timelineContent.appendChild(infoHeader);
+        
+        // Group results by second
+        const resultsBySecond = {};
+        this.frameResults.forEach(result => {
+            const second = Math.floor(result.timestamp);
+            if (!resultsBySecond[second]) {
+                resultsBySecond[second] = [];
+            }
+            resultsBySecond[second].push(result);
+        });
+        
+        // Display one entry per second (use the middle/representative frame)
+        const seconds = Object.keys(resultsBySecond).sort((a, b) => a - b);
+        
+        for (const second of seconds) {
+            const framesInSecond = resultsBySecond[second];
+            // Use the middle frame of that second as representative
+            const result = framesInSecond[Math.floor(framesInSecond.length / 2)];
+            if (!result.feedback) continue;
+            
+            const entry = document.createElement('div');
+            entry.className = 'timeline-entry';
+            
+            const timestamp = document.createElement('div');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = `${this.formatTimestamp(result.timestamp)}`;
+            
+            const score = document.createElement('span');
+            score.className = 'score';
+            score.textContent = `Score: ${result.feedback.score || '--'}`;
+            timestamp.appendChild(score);
+            
+            entry.appendChild(timestamp);
+            
+            const feedbackList = document.createElement('ul');
+            feedbackList.className = 'feedback-items';
+            
+            if (result.feedback.feedback && result.feedback.feedback.length > 0) {
+                result.feedback.feedback.forEach(fb => {
+                    const li = document.createElement('li');
+                    li.textContent = fb;
+                    feedbackList.appendChild(li);
+                });
+            } else {
+                const li = document.createElement('li');
+                li.textContent = 'Good form';
+                li.style.color = '#48BB78';
+                feedbackList.appendChild(li);
+            }
+            
+            entry.appendChild(feedbackList);
+            
+            // Add pose metrics data
+            if (result.feedback.metrics && Object.keys(result.feedback.metrics).length > 0) {
+                const metricsDiv = document.createElement('div');
+                metricsDiv.className = 'timeline-metrics';
+                
+                const metricsTitle = document.createElement('div');
+                metricsTitle.className = 'metrics-title';
+                metricsTitle.textContent = 'Pose Data:';
+                metricsDiv.appendChild(metricsTitle);
+                
+                const metricsGrid = document.createElement('div');
+                metricsGrid.className = 'metrics-grid';
+                
+                // Format and display each metric
+                Object.entries(result.feedback.metrics).forEach(([key, value]) => {
+                    const metricItem = document.createElement('div');
+                    metricItem.className = 'metric-item';
+                    
+                    const metricName = document.createElement('span');
+                    metricName.className = 'metric-name';
+                    metricName.textContent = this.formatMetricName(key);
+                    
+                    const metricValue = document.createElement('span');
+                    metricValue.className = 'metric-value';
+                    metricValue.textContent = this.formatMetricValue(key, value);
+                    
+                    metricItem.appendChild(metricName);
+                    metricItem.appendChild(metricValue);
+                    metricsGrid.appendChild(metricItem);
+                });
+                
+                metricsDiv.appendChild(metricsGrid);
+                entry.appendChild(metricsDiv);
+            }
+            
+            // Add all computed metrics if available
+            if (result.feedback.all_computed_metrics && Object.keys(result.feedback.all_computed_metrics).length > 0) {
+                const allMetricsDiv = document.createElement('div');
+                allMetricsDiv.className = 'timeline-all-metrics';
+                
+                const toggleBtn = document.createElement('button');
+                toggleBtn.className = 'toggle-metrics-btn';
+                toggleBtn.textContent = 'Show All Measurements';
+                toggleBtn.onclick = () => {
+                    const content = allMetricsDiv.querySelector('.all-metrics-content');
+                    if (content.style.display === 'none') {
+                        content.style.display = 'block';
+                        toggleBtn.textContent = 'Hide All Measurements';
+                    } else {
+                        content.style.display = 'none';
+                        toggleBtn.textContent = 'Show All Measurements';
+                    }
+                };
+                
+                const allMetricsContent = document.createElement('div');
+                allMetricsContent.className = 'all-metrics-content';
+                allMetricsContent.style.display = 'none';
+                
+                const allMetricsGrid = document.createElement('div');
+                allMetricsGrid.className = 'metrics-grid';
+                
+                Object.entries(result.feedback.all_computed_metrics).forEach(([key, value]) => {
+                    const metricItem = document.createElement('div');
+                    metricItem.className = 'metric-item';
+                    
+                    const metricName = document.createElement('span');
+                    metricName.className = 'metric-name';
+                    metricName.textContent = this.formatMetricName(key);
+                    
+                    const metricValue = document.createElement('span');
+                    metricValue.className = 'metric-value';
+                    metricValue.textContent = this.formatMetricValue(key, value);
+                    
+                    metricItem.appendChild(metricName);
+                    metricItem.appendChild(metricValue);
+                    allMetricsGrid.appendChild(metricItem);
+                });
+                
+                allMetricsContent.appendChild(allMetricsGrid);
+                allMetricsDiv.appendChild(toggleBtn);
+                allMetricsDiv.appendChild(allMetricsContent);
+                entry.appendChild(allMetricsDiv);
+            }
+            
+            timelineContent.appendChild(entry);
+        }
+    }
+    
+    formatMetricName(key) {
+        // Convert snake_case to Title Case and make human readable
+        return key
+            .replace(/_/g, ' ')
+            .replace(/deg/g, '(°)')
+            .replace(/cm/g, '(cm)')
+            .replace(/pct/g, '(%)')
+            .replace(/\b\w/g, l => l.toUpperCase());
+    }
+    
+    formatMetricValue(key, value) {
+        if (typeof value !== 'number') return value;
+        
+        // Format based on metric type
+        if (key.includes('deg') || key.includes('angle')) {
+            return `${value.toFixed(1)}°`;
+        } else if (key.includes('cm') || key.includes('height')) {
+            return `${value.toFixed(2)} cm`;
+        } else if (key.includes('pct') || key.includes('diff')) {
+            return `${value.toFixed(1)}%`;
+        } else if (key.includes('ratio')) {
+            return value.toFixed(3);
+        } else {
+            return value.toFixed(2);
+        }
+    }
+    
+    displayCommonIssues() {
+        const issuesList = document.getElementById('common-issues-list');
+        issuesList.innerHTML = '';
+        
+        // Count all feedback messages
+        const issueCount = {};
+        
+        this.frameResults.forEach(result => {
+            if (result.feedback && result.feedback.feedback) {
+                result.feedback.feedback.forEach(fb => {
+                    issueCount[fb] = (issueCount[fb] || 0) + 1;
+                });
+            }
+        });
+        
+        // Sort by frequency
+        const sortedIssues = Object.entries(issueCount)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5); // Top 5 issues
+        
+        if (sortedIssues.length === 0) {
+            const li = document.createElement('li');
+            li.textContent = 'No issues detected - Great job!';
+            li.style.borderLeftColor = '#48BB78';
+            issuesList.appendChild(li);
+        } else {
+            sortedIssues.forEach(([issue, count]) => {
+                const li = document.createElement('li');
+                li.textContent = issue;
+                
+                const countBadge = document.createElement('span');
+                countBadge.className = 'issue-count';
+                countBadge.textContent = `${count}x`;
+                
+                li.appendChild(countBadge);
+                issuesList.appendChild(li);
+            });
+        }
+    }
+    
+    formatTimestamp(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+}
+
 // Initialize the webcam manager when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize tutorial system
@@ -1247,6 +1810,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize immediately - waitForMediaPipe will handle script loading
     const webcamManager = new WebcamManager();
+    
+    // Initialize video analyzer
+    const videoAnalyzer = new VideoAnalyzer();
     
     // Check if browser supports required APIs
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {

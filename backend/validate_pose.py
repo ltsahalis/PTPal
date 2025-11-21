@@ -17,13 +17,14 @@ Common metric keys used below (all degrees unless noted):
 - trunk_forward_lean_deg         # sagittal trunk angle from vertical (+ forward)
 - ankle_dorsiflexion_deg
 - symmetry_diff_pct              # |left - right| / max(left,right) * 100
-- sway_peak_deg                  # peak-to-peak trunk sway about vertical
+- sway_peak_deg                  # hip-shoulder alignment angle (horizontal deviation)
 - pelvic_drop_deg                # frontal pelvic obliquity; + means stance hip dropped
-- foot_line_deviation_deg        # angle between back-heel→front-toe and midline (0 is ideal)
-- hold_time_s
+- foot_line_deviation_cm         # distance between front heel and back toe (should be minimal)
+- head_feet_alignment_deg        # head-to-feet alignment angle (horizontal deviation)
 - reach_distance_ratio           # reach distance / arm length (unitless)
 - stepped_during_task            # 1.0 if stepped/lost base, else 0.0
 - arm_overhead_alignment_deg     # angle error from symmetric overhead alignment
+- leg_lift_height_cm             # vertical height difference between ankles (for tree pose)
 
 All thresholds are configurable via the Thresholds dataclass.
 """
@@ -44,25 +45,26 @@ except ImportError:
 @dataclass
 class Thresholds:
     # Partial Squat
-    squat_min_depth_deg: float = 45.0     # knee flexion ≥ this → adequate depth
+    squat_min_depth_deg: float = 150.0     # knee flexion ≤ this → adequate depth (not too straight)
+    squat_max_depth_deg: float = 80.0    # knee flexion ≥ this → not too deep (not too bent)
     squat_max_forward_lean_deg: float = 35.0
     squat_max_knee_valgus_deg: float = 10.0  # frontal knee collapse beyond this
-    squat_max_heel_lift_cm: float = 1.0
+    squat_max_heel_lift_cm: float = 5.0
 
     # Heel Raises
     heel_min_raise_cm: float = 2.0
     heel_symmetry_max_diff_pct: float = 15.0
     heel_max_ankle_roll_deg: float = 8.0  # inversion/eversion
+    heel_max_trunk_lean_deg: float = 15.0  # keep trunk upright
 
     # Single-Leg Stance
-    sls_min_hold_s: float = 10.0
     sls_max_sway_deg: float = 8.0
     sls_max_pelvic_drop_deg: float = 7.0
 
     # Tandem Stance
-    tandem_max_foot_line_dev_deg: float = 6.0
+    tandem_max_foot_line_dev_cm: float = 10.0  # max distance between front heel and back toe
     tandem_max_trunk_lean_deg: float = 10.0
-    tandem_min_hold_s: float = 10.0
+    tandem_max_head_feet_deviation_deg: float = 10.0  # head should be over feet
 
     # Functional Reach
     fr_min_reach_ratio: float = 0.7  # ~70% of arm length as conservative floor
@@ -73,7 +75,7 @@ class Thresholds:
     tree_max_pelvic_shift_deg: float = 8.0
     tree_max_trunk_sway_deg: float = 8.0
     tree_max_arm_misalignment_deg: float = 10.0
-    tree_min_hold_s: float = 10.0
+    tree_min_leg_lift_cm: float = 10.0  # minimum ankle height difference to confirm leg is lifted
 
 
 @dataclass
@@ -112,10 +114,12 @@ def validate_partial_squat(metrics: Dict[str, float], th: Thresholds = Threshold
 
     reasons: List[str] = []
     fails = 0
-    checks = 4
+    checks = 5
 
-    fails += _bool_fail(metrics["knee_flexion_deg"] < th.squat_min_depth_deg,
-                        f"Go deeper: knee flexion {metrics['knee_flexion_deg']:.0f}° < {th.squat_min_depth_deg:.0f}°.", reasons)
+    fails += _bool_fail(metrics["knee_flexion_deg"] > th.squat_min_depth_deg,
+                        f"Go deeper: knee flexion {metrics['knee_flexion_deg']:.0f}° > {th.squat_min_depth_deg:.0f}°.", reasons)
+    fails += _bool_fail(metrics["knee_flexion_deg"] < th.squat_max_depth_deg,
+                        f"Don't go too deep: knee flexion {metrics['knee_flexion_deg']:.0f}° < {th.squat_max_depth_deg:.0f}°.", reasons)
     fails += _bool_fail(abs(metrics["hip_knee_ankle_alignment_deg"]) > th.squat_max_knee_valgus_deg,
                         f"Knees in line: valgus/varus {metrics['hip_knee_ankle_alignment_deg']:.0f}° > {th.squat_max_knee_valgus_deg:.0f}°.", reasons)
     fails += _bool_fail(metrics["heel_height_cm"] > th.squat_max_heel_lift_cm,
@@ -137,17 +141,16 @@ def validate_partial_squat(metrics: Dict[str, float], th: Thresholds = Threshold
 def validate_heel_raises(metrics: Dict[str, float], th: Thresholds = Thresholds()) -> PoseResult:
     """Validate Heel Raises (bilateral/single).
 
-    Required metrics: heel_height_cm, symmetry_diff_pct, ankle_roll_deg
-    Optional: hold_time_s (for endurance sets)
+    Required metrics: heel_height_cm, symmetry_diff_pct, ankle_roll_deg, trunk_forward_lean_deg
     """
-    req = ["heel_height_cm", "symmetry_diff_pct", "ankle_roll_deg"]
+    req = ["heel_height_cm", "symmetry_diff_pct", "ankle_roll_deg", "trunk_forward_lean_deg"]
     missing = [k for k in req if k not in metrics]
     if missing:
         raise KeyError(f"Heel Raises missing metrics: {missing}")
 
     reasons: List[str] = []
     fails = 0
-    checks = 3
+    checks = 4
 
     fails += _bool_fail(metrics["heel_height_cm"] < th.heel_min_raise_cm,
                         f"Raise higher: heel height {metrics['heel_height_cm']:.1f} cm < {th.heel_min_raise_cm:.1f} cm.", reasons)
@@ -155,6 +158,8 @@ def validate_heel_raises(metrics: Dict[str, float], th: Thresholds = Thresholds(
                         f"Match sides: asymmetry {metrics['symmetry_diff_pct']:.0f}% > {th.heel_symmetry_max_diff_pct:.0f}%.", reasons)
     fails += _bool_fail(abs(metrics.get("ankle_roll_deg", 0.0)) > th.heel_max_ankle_roll_deg,
                         f"Neutral ankles: roll {metrics.get('ankle_roll_deg', 0.0):.0f}° > {th.heel_max_ankle_roll_deg:.0f}°.", reasons)
+    fails += _bool_fail(metrics["trunk_forward_lean_deg"] > th.heel_max_trunk_lean_deg,
+                        f"Keep trunk upright: lean {metrics['trunk_forward_lean_deg']:.0f}° > {th.heel_max_trunk_lean_deg:.0f}°.", reasons)
 
     score = _score_from_flags(checks, fails)
     return PoseResult(
@@ -162,7 +167,7 @@ def validate_heel_raises(metrics: Dict[str, float], th: Thresholds = Thresholds(
         score=score,
         pass_fail=(fails == 0),
         reasons=reasons or ["Good height and symmetry."],
-        metrics={k: metrics[k] for k in req if k in metrics} | {k: v for k, v in metrics.items() if k == "hold_time_s"},
+        metrics={k: metrics[k] for k in req if k in metrics},
         thresholds=asdict(th),
     )
 
@@ -170,19 +175,17 @@ def validate_heel_raises(metrics: Dict[str, float], th: Thresholds = Thresholds(
 def validate_single_leg_stance(metrics: Dict[str, float], th: Thresholds = Thresholds()) -> PoseResult:
     """Validate Single-Leg Stance (SLS).
 
-    Required metrics: hold_time_s, sway_peak_deg, pelvic_drop_deg
+    Required metrics: sway_peak_deg, pelvic_drop_deg
     """
-    req = ["hold_time_s", "sway_peak_deg", "pelvic_drop_deg"]
+    req = ["sway_peak_deg", "pelvic_drop_deg"]
     missing = [k for k in req if k not in metrics]
     if missing:
         raise KeyError(f"SLS missing metrics: {missing}")
 
     reasons: List[str] = []
     fails = 0
-    checks = 3
+    checks = 2
 
-    fails += _bool_fail(metrics["hold_time_s"] < th.sls_min_hold_s,
-                        f"Hold longer: {metrics['hold_time_s']:.1f}s < {th.sls_min_hold_s:.1f}s.", reasons)
     fails += _bool_fail(metrics["sway_peak_deg"] > th.sls_max_sway_deg,
                         f"Reduce sway: {metrics['sway_peak_deg']:.0f}° > {th.sls_max_sway_deg:.0f}°.", reasons)
     fails += _bool_fail(metrics["pelvic_drop_deg"] > th.sls_max_pelvic_drop_deg,
@@ -200,11 +203,11 @@ def validate_single_leg_stance(metrics: Dict[str, float], th: Thresholds = Thres
 
 
 def validate_tandem_stance(metrics: Dict[str, float], th: Thresholds = Thresholds()) -> PoseResult:
-    """Validate Tandem Stance (heel-to-toe).
+    """Validate Tandem Stance (auto-detects foot position based on rightmost point).
 
-    Required metrics: foot_line_deviation_deg, trunk_forward_lean_deg, hold_time_s
+    Required metrics: foot_line_deviation_cm, trunk_forward_lean_deg, head_feet_alignment_deg
     """
-    req = ["foot_line_deviation_deg", "trunk_forward_lean_deg", "hold_time_s"]
+    req = ["foot_line_deviation_cm", "trunk_forward_lean_deg", "head_feet_alignment_deg"]
     missing = [k for k in req if k not in metrics]
     if missing:
         raise KeyError(f"Tandem Stance missing metrics: {missing}")
@@ -213,12 +216,12 @@ def validate_tandem_stance(metrics: Dict[str, float], th: Thresholds = Threshold
     fails = 0
     checks = 3
 
-    fails += _bool_fail(abs(metrics["foot_line_deviation_deg"]) > th.tandem_max_foot_line_dev_deg,
-                        f"Line up feet: deviation {metrics['foot_line_deviation_deg']:.0f}° > {th.tandem_max_foot_line_dev_deg:.0f}°.", reasons)
+    fails += _bool_fail(metrics["foot_line_deviation_cm"] > th.tandem_max_foot_line_dev_cm,
+                        f"Bring feet closer: gap {metrics['foot_line_deviation_cm']:.1f} cm > {th.tandem_max_foot_line_dev_cm:.1f} cm.", reasons)
     fails += _bool_fail(abs(metrics["trunk_forward_lean_deg"]) > th.tandem_max_trunk_lean_deg,
                         f"Stand tall: trunk lean {metrics['trunk_forward_lean_deg']:.0f}° > {th.tandem_max_trunk_lean_deg:.0f}°.", reasons)
-    fails += _bool_fail(metrics["hold_time_s"] < th.tandem_min_hold_s,
-                        f"Hold longer: {metrics['hold_time_s']:.1f}s < {th.tandem_min_hold_s:.1f}s.", reasons)
+    fails += _bool_fail(metrics["head_feet_alignment_deg"] > th.tandem_max_head_feet_deviation_deg,
+                        f"Align head over feet: {metrics['head_feet_alignment_deg']:.0f}° > {th.tandem_max_head_feet_deviation_deg:.0f}°.", reasons)
 
     score = _score_from_flags(checks, fails)
     return PoseResult(
@@ -229,6 +232,8 @@ def validate_tandem_stance(metrics: Dict[str, float], th: Thresholds = Threshold
         metrics={k: metrics[k] for k in req},
         thresholds=asdict(th),
     )
+
+
 
 
 def validate_functional_reach(metrics: Dict[str, float], th: Thresholds = Thresholds()) -> PoseResult:
@@ -269,14 +274,52 @@ def validate_functional_reach(metrics: Dict[str, float], th: Thresholds = Thresh
 
 
 def validate_tree_pose(metrics: Dict[str, float], th: Thresholds = Thresholds()) -> PoseResult:
-    """Validate Tree Pose.
+    """Validate Tree Pose (auto-detects which leg is lifted).
 
-    Required metrics: pelvic_drop_deg, sway_peak_deg, arm_overhead_alignment_deg, hold_time_s
+    Required metrics: pelvic_drop_deg, sway_peak_deg, arm_overhead_alignment_deg, leg_lift_height_cm
     """
-    req = ["pelvic_drop_deg", "sway_peak_deg", "arm_overhead_alignment_deg", "hold_time_s"]
+    req = ["pelvic_drop_deg", "sway_peak_deg", "arm_overhead_alignment_deg", "leg_lift_height_cm"]
     missing = [k for k in req if k not in metrics]
     if missing:
         raise KeyError(f"Tree Pose missing metrics: {missing}")
+
+    reasons: List[str] = []
+    fails = 0
+    checks = 4
+    
+    # Determine which leg is lifted for pose name
+    lifted_leg = metrics.get('lifted_leg', 'unknown')
+    pose_name = f"Tree Pose (Right Leg Lifted)" if lifted_leg == 'right' else f"Tree Pose (Left Leg Lifted)" if lifted_leg == 'left' else "Tree Pose"
+
+    fails += _bool_fail(abs(metrics["pelvic_drop_deg"]) > th.tree_max_pelvic_shift_deg,
+                        f"Level hips: shift {metrics['pelvic_drop_deg']:.0f}° > {th.tree_max_pelvic_shift_deg:.0f}°.", reasons)
+    fails += _bool_fail(metrics["sway_peak_deg"] > th.tree_max_trunk_sway_deg,
+                        f"Align shoulders over hips: {metrics['sway_peak_deg']:.0f}° > {th.tree_max_trunk_sway_deg:.0f}°.", reasons)
+    fails += _bool_fail(abs(metrics["arm_overhead_alignment_deg"]) > th.tree_max_arm_misalignment_deg,
+                        f"Align arms overhead: error {metrics['arm_overhead_alignment_deg']:.0f}° > {th.tree_max_arm_misalignment_deg:.0f}°.", reasons)
+    fails += _bool_fail(metrics["leg_lift_height_cm"] < th.tree_min_leg_lift_cm,
+                        f"Lift {lifted_leg} leg higher: {metrics['leg_lift_height_cm']:.1f} cm < {th.tree_min_leg_lift_cm:.1f} cm.", reasons)
+
+    score = _score_from_flags(checks, fails)
+    return PoseResult(
+        pose=pose_name,
+        score=score,
+        pass_fail=(fails == 0),
+        reasons=reasons or ["Centered and aligned."],
+        metrics={k: metrics[k] for k in req},
+        thresholds=asdict(th),
+    )
+
+
+def validate_tree_pose_right(metrics: Dict[str, float], th: Thresholds = Thresholds()) -> PoseResult:
+    """Validate Tree Pose with right leg lifted (standing on left leg).
+
+    Required metrics: pelvic_drop_deg, sway_peak_deg, arm_overhead_alignment_deg, leg_lift_height_cm
+    """
+    req = ["pelvic_drop_deg", "sway_peak_deg", "arm_overhead_alignment_deg", "leg_lift_height_cm"]
+    missing = [k for k in req if k not in metrics]
+    if missing:
+        raise KeyError(f"Tree Pose (Right) missing metrics: {missing}")
 
     reasons: List[str] = []
     fails = 0
@@ -285,18 +328,52 @@ def validate_tree_pose(metrics: Dict[str, float], th: Thresholds = Thresholds())
     fails += _bool_fail(abs(metrics["pelvic_drop_deg"]) > th.tree_max_pelvic_shift_deg,
                         f"Level hips: shift {metrics['pelvic_drop_deg']:.0f}° > {th.tree_max_pelvic_shift_deg:.0f}°.", reasons)
     fails += _bool_fail(metrics["sway_peak_deg"] > th.tree_max_trunk_sway_deg,
-                        f"Steady trunk: sway {metrics['sway_peak_deg']:.0f}° > {th.tree_max_trunk_sway_deg:.0f}°.", reasons)
+                        f"Align shoulders over hips: {metrics['sway_peak_deg']:.0f}° > {th.tree_max_trunk_sway_deg:.0f}°.", reasons)
     fails += _bool_fail(abs(metrics["arm_overhead_alignment_deg"]) > th.tree_max_arm_misalignment_deg,
                         f"Align arms overhead: error {metrics['arm_overhead_alignment_deg']:.0f}° > {th.tree_max_arm_misalignment_deg:.0f}°.", reasons)
-    fails += _bool_fail(metrics["hold_time_s"] < th.tree_min_hold_s,
-                        f"Hold longer: {metrics['hold_time_s']:.1f}s < {th.tree_min_hold_s:.1f}s.", reasons)
+    fails += _bool_fail(metrics["leg_lift_height_cm"] < th.tree_min_leg_lift_cm,
+                        f"Lift right leg higher: {metrics['leg_lift_height_cm']:.1f} cm < {th.tree_min_leg_lift_cm:.1f} cm.", reasons)
 
     score = _score_from_flags(checks, fails)
     return PoseResult(
-        pose="Tree Pose",
+        pose="Tree Pose (Right Leg)",
         score=score,
         pass_fail=(fails == 0),
-        reasons=reasons or ["Centered and aligned."],
+        reasons=reasons or ["Centered and aligned - right leg lifted."],
+        metrics={k: metrics[k] for k in req},
+        thresholds=asdict(th),
+    )
+
+
+def validate_tree_pose_left(metrics: Dict[str, float], th: Thresholds = Thresholds()) -> PoseResult:
+    """Validate Tree Pose with left leg lifted (standing on right leg).
+
+    Required metrics: pelvic_drop_deg, sway_peak_deg, arm_overhead_alignment_deg, leg_lift_height_cm
+    """
+    req = ["pelvic_drop_deg", "sway_peak_deg", "arm_overhead_alignment_deg", "leg_lift_height_cm"]
+    missing = [k for k in req if k not in metrics]
+    if missing:
+        raise KeyError(f"Tree Pose (Left) missing metrics: {missing}")
+
+    reasons: List[str] = []
+    fails = 0
+    checks = 4
+
+    fails += _bool_fail(abs(metrics["pelvic_drop_deg"]) > th.tree_max_pelvic_shift_deg,
+                        f"Level hips: shift {metrics['pelvic_drop_deg']:.0f}° > {th.tree_max_pelvic_shift_deg:.0f}°.", reasons)
+    fails += _bool_fail(metrics["sway_peak_deg"] > th.tree_max_trunk_sway_deg,
+                        f"Align shoulders over hips: {metrics['sway_peak_deg']:.0f}° > {th.tree_max_trunk_sway_deg:.0f}°.", reasons)
+    fails += _bool_fail(abs(metrics["arm_overhead_alignment_deg"]) > th.tree_max_arm_misalignment_deg,
+                        f"Align arms overhead: error {metrics['arm_overhead_alignment_deg']:.0f}° > {th.tree_max_arm_misalignment_deg:.0f}°.", reasons)
+    fails += _bool_fail(metrics["leg_lift_height_cm"] < th.tree_min_leg_lift_cm,
+                        f"Lift left leg higher: {metrics['leg_lift_height_cm']:.1f} cm < {th.tree_min_leg_lift_cm:.1f} cm.", reasons)
+
+    score = _score_from_flags(checks, fails)
+    return PoseResult(
+        pose="Tree Pose (Left Leg)",
+        score=score,
+        pass_fail=(fails == 0),
+        reasons=reasons or ["Centered and aligned - left leg lifted."],
         metrics={k: metrics[k] for k in req},
         thresholds=asdict(th),
     )
@@ -311,6 +388,8 @@ POSE_DISPATCH = {
     "tandem_stance": validate_tandem_stance,
     "functional_reach": validate_functional_reach,
     "tree_pose": validate_tree_pose,
+    "tree_pose_left": validate_tree_pose_left,
+    "tree_pose_right": validate_tree_pose_right,
 }
 
 
@@ -427,7 +506,7 @@ FEWSHOT_SLS_BORDERLINE = {
     "score": 80,
     "pass_fail": True,
     "reasons": ["Reduce sway: 9° > 8° (borderline)."],
-    "metrics": {"hold_time_s": 15, "sway_peak_deg": 9, "pelvic_drop_deg": 4}
+    "metrics": {"sway_peak_deg": 9, "pelvic_drop_deg": 4}
 }
 
 
@@ -444,16 +523,16 @@ if __name__ == "__main__":
             "heel_height_cm": 0.2,
             "symmetry_diff_pct": 9.0,
             "ankle_roll_deg": 4.0,
+            "trunk_forward_lean_deg": 8.0,
         },
         "single_leg_stance": {
-            "hold_time_s": 12.0,
             "sway_peak_deg": 20.0,
             "pelvic_drop_deg": 5.0,
         },
         "tandem_stance": {
-            "foot_line_deviation_deg": 4.0,
+            "foot_line_deviation_cm": 8.0,
             "trunk_forward_lean_deg": 6.0,
-            "hold_time_s": 12.0,
+            "head_feet_alignment_deg": 5.0,
         },
         "functional_reach": {
             "reach_distance_ratio": 0.75,
@@ -464,7 +543,20 @@ if __name__ == "__main__":
             "pelvic_drop_deg": 3.0,
             "sway_peak_deg": 5.0,
             "arm_overhead_alignment_deg": 6.0,
-            "hold_time_s": 14.0,
+            "leg_lift_height_cm": 25.0,
+            "lifted_leg": "right",
+        },
+        "tree_pose_left": {
+            "pelvic_drop_deg": 3.0,
+            "sway_peak_deg": 5.0,
+            "arm_overhead_alignment_deg": 6.0,
+            "leg_lift_height_cm": 25.0,
+        },
+        "tree_pose_right": {
+            "pelvic_drop_deg": 3.0,
+            "sway_peak_deg": 5.0,
+            "arm_overhead_alignment_deg": 6.0,
+            "leg_lift_height_cm": 25.0,
         },
     }
 
