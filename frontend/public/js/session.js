@@ -346,6 +346,7 @@ class RealTimeFeedbackREST {
         this.passStatus = document.getElementById('pass-status');
         this.headerTitleArea = document.getElementById('header-title-area');
         this.headerFeedbackArea = document.getElementById('header-feedback-area');
+        this.feedbackList = document.getElementById('feedback-list');
         
         this.initializeEventListeners();
     }
@@ -447,6 +448,9 @@ class RealTimeFeedbackREST {
         }
         
         try {
+            // Get session ID from localStorage
+            const sessionId = localStorage.getItem('ptpal_session_id') || null;
+            
             const response = await fetch(`${this.apiBaseUrl}/api/validate-pose`, {
             method: 'POST',
             headers: {
@@ -454,7 +458,8 @@ class RealTimeFeedbackREST {
             },
             body: JSON.stringify({
                 pose_type: poseType,
-                landmarks: results.poseLandmarks
+                landmarks: results.poseLandmarks,
+                session_id: sessionId
             })
         });
         
@@ -512,6 +517,8 @@ class RealTimeFeedbackREST {
     }
     
     updateFeedbackList(feedbackArray) {
+        if (!this.feedbackList) return; // Guard against missing element
+        
         if (feedbackArray.length === 0) {
             this.feedbackList.innerHTML = '<li>No specific feedback available</li>';
             return;
@@ -603,6 +610,10 @@ class RealTimeFeedbackREST {
     }
     
     showError(message) {
+        if (!this.feedbackList) {
+            console.error('Feedback list element not found:', message);
+            return;
+        }
         this.feedbackList.innerHTML = `<li style="color: #E53E3E; border-left-color: #E53E3E;">${message}</li>`;
     }
     
@@ -1687,7 +1698,7 @@ class GuidedSessionModal {
         this.showExerciseSetup();
     }
     
-    completeExercise() {
+    async completeExercise() {
         this.state = 'finished';
         this.clearTimer();
         if (this.feedbackSystem) {
@@ -1697,20 +1708,311 @@ class GuidedSessionModal {
         this.toggleLivePanel(true);
         this.hideFloatingPanel();
         this.showOverlay();
-        this.setTitle('Great job!', 'Would you like to repeat this exercise or choose a new one?');
+        
+        // Show loading state while fetching summary
+        this.setTitle('Great job!', 'Analyzing your performance...');
         this.setActions({
             primaryText: 'Repeat Exercise',
             secondaryText: 'New Exercise',
             homeVisible: true
         });
+        
+        // Fetch and display session summary
+        try {
+            const sessionId = this.webcamManager.getSessionId();
+            const summary = await this.fetchSessionSummary(sessionId);
+            this.displaySummary(summary);
+        } catch (error) {
+            console.error('Error fetching session summary:', error);
+            // Fallback to simple message if summary fails
+            this.setTitle('Great job!', 'Would you like to repeat this exercise or choose a new one?');
+            this.hideSummary();
+        }
+    }
+    
+    async fetchSessionSummary(sessionId) {
+        const apiBaseUrl = this.webcamManager.apiBaseUrl || resolveApiBaseUrl();
+        const response = await fetch(`${apiBaseUrl}/api/session-summary/${sessionId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    }
+    
+    displaySummary(summary) {
+        // Update title with score info
+        const scoreText = summary.average_score ? ` (Average Score: ${summary.average_score.toFixed(1)}/5)` : '';
+        this.setTitle(`Great job!${scoreText}`, 'Here\'s how you did:');
+        
+        // Show summary in the live panel
+        const livePanel = document.getElementById('session-live-panel');
+        if (livePanel) {
+            // Hide the timer when showing summary
+            const timerElement = livePanel.querySelector('.session-timer');
+            if (timerElement) {
+                timerElement.style.display = 'none';
+            }
+            
+            // Hide the instruction text
+            const instructionText = document.getElementById('exercise-instruction');
+            if (instructionText) {
+                instructionText.style.display = 'none';
+            }
+            
+            // Create or update summary HTML
+            let summaryHtml = `
+                <div class="session-summary">
+                    <div class="summary-section summary-positive">
+                        <h4 class="summary-title">What You Did Well:</h4>
+                        <ul class="summary-list" id="summary-what-went-well"></ul>
+                    </div>
+                    <div class="summary-section summary-improvement">
+                        <h4 class="summary-title">Areas to Improve:</h4>
+                        <ul class="summary-list" id="summary-needs-improvement"></ul>
+                    </div>
+                </div>
+            `;
+            
+            // Check if summary already exists, if not add it
+            let summaryContainer = livePanel.querySelector('.session-summary');
+            if (!summaryContainer) {
+                livePanel.insertAdjacentHTML('beforeend', summaryHtml);
+                summaryContainer = livePanel.querySelector('.session-summary');
+            }
+            
+            // Add parents summary button (summary will be loaded on-demand)
+            let parentsContainer = livePanel.querySelector('.parents-summary-container');
+            if (!parentsContainer) {
+                const parentsHtml = `
+                    <div class="parents-summary-container">
+                        <button id="parents-summary-btn" class="btn-secondary-small">Parents Summary</button>
+                        <div id="parents-summary-content" class="parents-summary-content hidden">
+                            <div class="parents-summary-loading" id="parents-summary-loading" style="display: none;">
+                                <p>Loading detailed summary...</p>
+                            </div>
+                            <div id="parents-summary-loaded" style="display: none;">
+                                <div class="parents-summary-section">
+                                    <h4 class="parents-summary-title">Overall Assessment</h4>
+                                    <p id="parents-overall-assessment"></p>
+                                </div>
+                                <div class="parents-summary-section">
+                                    <h4 class="parents-summary-title">Strengths</h4>
+                                    <ul id="parents-strengths" class="parents-summary-list"></ul>
+                                </div>
+                                <div class="parents-summary-section">
+                                    <h4 class="parents-summary-title">Areas for Improvement</h4>
+                                    <ul id="parents-improvements" class="parents-summary-list"></ul>
+                                </div>
+                                <div class="parents-summary-section">
+                                    <h4 class="parents-summary-title">Technical Notes</h4>
+                                    <p id="parents-technical-notes"></p>
+                                </div>
+                                <div class="parents-summary-section">
+                                    <h4 class="parents-summary-title">Recommendations</h4>
+                                    <ul id="parents-recommendations" class="parents-summary-list"></ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                livePanel.insertAdjacentHTML('beforeend', parentsHtml);
+            }
+            
+            // Populate what went well
+            const whatWentWellList = document.getElementById('summary-what-went-well');
+            if (whatWentWellList) {
+                whatWentWellList.innerHTML = '';
+                if (summary.what_went_well && summary.what_went_well.length > 0) {
+                    summary.what_went_well.forEach(item => {
+                        const li = document.createElement('li');
+                        li.textContent = item;
+                        whatWentWellList.appendChild(li);
+                    });
+                } else {
+                    const li = document.createElement('li');
+                    li.textContent = 'You completed the exercise!';
+                    whatWentWellList.appendChild(li);
+                }
+            }
+            
+            // Populate needs improvement
+            const needsImprovementList = document.getElementById('summary-needs-improvement');
+            if (needsImprovementList) {
+                needsImprovementList.innerHTML = '';
+                if (summary.needs_improvement && summary.needs_improvement.length > 0) {
+                    summary.needs_improvement.forEach(item => {
+                        const li = document.createElement('li');
+                        li.textContent = item;
+                        needsImprovementList.appendChild(li);
+                    });
+                } else {
+                    const li = document.createElement('li');
+                    li.textContent = 'Keep practicing to improve';
+                    needsImprovementList.appendChild(li);
+                }
+            }
+            
+            // Add click handler for parents summary button (loads on-demand)
+            const parentsSummaryBtn = document.getElementById('parents-summary-btn');
+            if (parentsSummaryBtn) {
+                // Remove existing listeners by cloning
+                const newBtn = parentsSummaryBtn.cloneNode(true);
+                parentsSummaryBtn.parentNode.replaceChild(newBtn, parentsSummaryBtn);
+                newBtn.addEventListener('click', () => {
+                    this.handleParentSummaryClick();
+                });
+            }
+        }
+    }
+    
+    populateParentSummary(parentSummary) {
+        // Overall assessment
+        const overallAssessment = document.getElementById('parents-overall-assessment');
+        if (overallAssessment && parentSummary.overall_assessment) {
+            overallAssessment.textContent = parentSummary.overall_assessment;
+        }
+        
+        // Strengths
+        const strengthsList = document.getElementById('parents-strengths');
+        if (strengthsList && parentSummary.strengths) {
+            strengthsList.innerHTML = '';
+            parentSummary.strengths.forEach(item => {
+                const li = document.createElement('li');
+                li.textContent = item;
+                strengthsList.appendChild(li);
+            });
+        }
+        
+        // Improvements needed
+        const improvementsList = document.getElementById('parents-improvements');
+        if (improvementsList && parentSummary.improvements_needed) {
+            improvementsList.innerHTML = '';
+            parentSummary.improvements_needed.forEach(item => {
+                const li = document.createElement('li');
+                li.textContent = item;
+                improvementsList.appendChild(li);
+            });
+        }
+        
+        // Technical notes
+        const technicalNotes = document.getElementById('parents-technical-notes');
+        if (technicalNotes && parentSummary.technical_notes) {
+            technicalNotes.textContent = parentSummary.technical_notes;
+        }
+        
+        // Recommendations
+        const recommendationsList = document.getElementById('parents-recommendations');
+        if (recommendationsList && parentSummary.recommendations) {
+            recommendationsList.innerHTML = '';
+            parentSummary.recommendations.forEach(item => {
+                const li = document.createElement('li');
+                li.textContent = item;
+                recommendationsList.appendChild(li);
+            });
+        }
+    }
+    
+    async handleParentSummaryClick() {
+        const parentsSummaryContent = document.getElementById('parents-summary-content');
+        const parentsSummaryBtn = document.getElementById('parents-summary-btn');
+        const parentsSummaryLoading = document.getElementById('parents-summary-loading');
+        const parentsSummaryLoaded = document.getElementById('parents-summary-loaded');
+        
+        if (!parentsSummaryContent || !parentsSummaryBtn) return;
+        
+        const isHidden = parentsSummaryContent.classList.contains('hidden');
+        
+        if (isHidden) {
+            // Show the content and load parent summary
+            parentsSummaryContent.classList.remove('hidden');
+            parentsSummaryBtn.disabled = true;
+            parentsSummaryBtn.textContent = 'Loading...';
+            
+            // Show loading state
+            if (parentsSummaryLoading) {
+                parentsSummaryLoading.style.display = 'block';
+            }
+            if (parentsSummaryLoaded) {
+                parentsSummaryLoaded.style.display = 'none';
+            }
+            
+            try {
+                const sessionId = this.webcamManager.getSessionId();
+                const apiBaseUrl = this.webcamManager.apiBaseUrl || resolveApiBaseUrl();
+                const response = await fetch(`${apiBaseUrl}/api/parent-summary/${sessionId}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.parent_summary) {
+                    this.populateParentSummary(data.parent_summary);
+                    
+                    // Hide loading, show content
+                    if (parentsSummaryLoading) {
+                        parentsSummaryLoading.style.display = 'none';
+                    }
+                    if (parentsSummaryLoaded) {
+                        parentsSummaryLoaded.style.display = 'block';
+                    }
+                    
+                    parentsSummaryBtn.textContent = 'Hide Parents Summary';
+                } else {
+                    throw new Error(data.message || 'Failed to load parent summary');
+                }
+            } catch (error) {
+                console.error('Error fetching parent summary:', error);
+                if (parentsSummaryLoading) {
+                    parentsSummaryLoading.innerHTML = `<p style="color: #E53E3E;">Error loading summary: ${error.message}</p>`;
+                }
+                parentsSummaryBtn.textContent = 'Parents Summary';
+            } finally {
+                parentsSummaryBtn.disabled = false;
+            }
+        } else {
+            // Hide the content
+            parentsSummaryContent.classList.add('hidden');
+            parentsSummaryBtn.textContent = 'Parents Summary';
+        }
+    }
+    
+    hideSummary() {
+        const livePanel = document.getElementById('session-live-panel');
+        if (livePanel) {
+            const summaryContainer = livePanel.querySelector('.session-summary');
+            if (summaryContainer) {
+                summaryContainer.remove();
+            }
+            
+            const parentsContainer = livePanel.querySelector('.parents-summary-container');
+            if (parentsContainer) {
+                parentsContainer.remove();
+            }
+            
+            // Show the timer again
+            const timerElement = livePanel.querySelector('.session-timer');
+            if (timerElement) {
+                timerElement.style.display = '';
+            }
+            
+            // Show the instruction text again
+            const instructionText = document.getElementById('exercise-instruction');
+            if (instructionText) {
+                instructionText.style.display = '';
+            }
+        }
     }
     
     repeatExercise() {
+        this.hideSummary();
         this.remainingSeconds = this.exerciseDuration;
         this.startExerciseSession();
     }
     
     chooseNewExercise() {
+        this.hideSummary();
         this.toggleLivePanel(false);
         this.showExerciseSetup();
     }

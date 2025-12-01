@@ -492,6 +492,8 @@ def validate_pose_endpoint():
         
         # Get AI-enhanced feedback from OpenAI (if configured)
         llm_feedback = get_llm_feedback(result)
+        if not llm_feedback:
+            print(f"LLM feedback not available. Check OpenAI API key configuration.")
         # Store feedback results in database
         session_id = data.get('session_id', f'session_{int(datetime.now().timestamp() * 1000)}')
         timestamp = datetime.now().isoformat()
@@ -618,6 +620,290 @@ def export_angles(session_id):
         })
         
     except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/session-summary/<session_id>', methods=['GET'])
+def get_session_summary(session_id):
+    """Get aggregated feedback summary for a session"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Get all feedback results for this session
+        cursor.execute('''
+            SELECT timestamp, pose_type, score, pass_fail, feedback, metrics
+            FROM feedback_results 
+            WHERE session_id = ?
+            ORDER BY timestamp ASC
+        ''', (session_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if not rows:
+            return jsonify({
+                "status": "success",
+                "session_id": session_id,
+                "total_samples": 0,
+                "average_score": 0,
+                "pass_rate": 0,
+                "what_went_well": [],
+                "needs_improvement": []
+            })
+        
+        # Aggregate data
+        total_samples = len(rows)
+        scores = []
+        pass_count = 0
+        all_feedback = []
+        all_positive_feedback = []
+        all_negative_feedback = []
+        
+        for row in rows:
+            timestamp, pose_type, score, pass_fail, feedback_json, metrics_json = row
+            scores.append(score)
+            if pass_fail:
+                pass_count += 1
+            
+            # Parse feedback (stored as JSON string)
+            try:
+                feedback_list = json.loads(feedback_json) if feedback_json else []
+                all_feedback.extend(feedback_list)
+                
+                # Categorize feedback based on score and pass status
+                if score >= 4 and pass_fail:
+                    all_positive_feedback.extend(feedback_list)
+                elif score <= 2 or not pass_fail:
+                    all_negative_feedback.extend(feedback_list)
+            except:
+                pass
+        
+        # Calculate averages
+        average_score = sum(scores) / len(scores) if scores else 0
+        pass_rate = (pass_count / total_samples) * 100 if total_samples > 0 else 0
+        
+        # Get pose type from first row
+        pose_type = rows[0][1] if rows else "exercise"
+        
+        # Use OpenAI to generate personalized summary if available
+        what_went_well = []
+        needs_improvement = []
+        
+        # Try to get OpenAI client from validate_pose
+        try:
+            from validate_pose import client as openai_client
+            if openai_client:
+                try:
+                    # Create prompt for OpenAI - child-friendly summary
+                    system_prompt = """You are PT Pal, a physical therapy coaching assistant. 
+Analyze the exercise session data and provide a personalized summary with:
+1. 3-5 specific things the user did well (based on their actual performance)
+2. 3-5 specific areas for improvement (based on their actual performance)
+Make sure that this is understandable by a 5 year old.
+
+Keep each item concise (5-10 words max). Be encouraging but honest. Focus on actionable feedback.
+Return ONLY a JSON object with this exact structure:
+{
+    "what_went_well": ["item1", "item2", "item3"],
+    "needs_improvement": ["item1", "item2", "item3"]
+}"""
+                    
+                    user_prompt = f"""Exercise: {pose_type}
+Session Stats:
+- Total samples: {total_samples}
+- Average score: {average_score:.1f}/5
+- Pass rate: {pass_rate:.1f}%
+
+All feedback received: {', '.join(all_feedback[:20]) if all_feedback else 'Limited feedback available'}
+
+Generate a personalized summary based on this data."""
+                    
+                    response = openai_client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=0.7,
+                        max_tokens=300,
+                        response_format={"type": "json_object"}
+                    )
+                    
+                    llm_output = json.loads(response.choices[0].message.content)
+                    what_went_well = llm_output.get("what_went_well", [])
+                    needs_improvement = llm_output.get("needs_improvement", [])
+                        
+                except Exception as e:
+                    print(f"Error getting OpenAI summary: {e}")
+                    what_went_well = []
+                    needs_improvement = []
+        except ImportError:
+            pass
+        
+        # Fallback if OpenAI is not available or failed - use minimal generic feedback
+        if not what_went_well and not needs_improvement:
+            # Only use minimal fallback if OpenAI completely failed
+            what_went_well = ["You completed the exercise!"]
+            needs_improvement = ["Keep practicing to improve"]
+        
+        return jsonify({
+            "status": "success",
+            "session_id": session_id,
+            "total_samples": total_samples,
+            "average_score": round(average_score, 1),
+            "pass_rate": round(pass_rate, 1),
+            "what_went_well": what_went_well[:5],
+            "needs_improvement": needs_improvement[:5]
+        })
+        
+    except Exception as e:
+        print(f"Error getting session summary: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/parent-summary/<session_id>', methods=['GET'])
+def get_parent_summary(session_id):
+    """Get detailed parent summary for a session (generated on-demand)"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Get all feedback results for this session
+        cursor.execute('''
+            SELECT timestamp, pose_type, score, pass_fail, feedback, metrics
+            FROM feedback_results 
+            WHERE session_id = ?
+            ORDER BY timestamp ASC
+        ''', (session_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if not rows:
+            return jsonify({
+                "status": "error",
+                "message": "No session data found"
+            }), 404
+        
+        # Aggregate data
+        total_samples = len(rows)
+        scores = []
+        pass_count = 0
+        all_feedback = []
+        all_positive_feedback = []
+        all_negative_feedback = []
+        
+        for row in rows:
+            timestamp, pose_type, score, pass_fail, feedback_json, metrics_json = row
+            scores.append(score)
+            if pass_fail:
+                pass_count += 1
+            
+            # Parse feedback (stored as JSON string)
+            try:
+                feedback_list = json.loads(feedback_json) if feedback_json else []
+                all_feedback.extend(feedback_list)
+                
+                # Categorize feedback based on score and pass status
+                if score >= 4 and pass_fail:
+                    all_positive_feedback.extend(feedback_list)
+                elif score <= 2 or not pass_fail:
+                    all_negative_feedback.extend(feedback_list)
+            except:
+                pass
+        
+        # Calculate averages
+        average_score = sum(scores) / len(scores) if scores else 0
+        pass_rate = (pass_count / total_samples) * 100 if total_samples > 0 else 0
+        
+        # Get pose type from first row
+        pose_type = rows[0][1] if rows else "exercise"
+        
+        # Generate parent summary using OpenAI
+        parent_summary = None
+        
+        try:
+            from validate_pose import client as openai_client
+            if openai_client:
+                parent_system_prompt = """You are PT Pal, a physical therapy coaching assistant providing detailed feedback to parents/guardians.
+Analyze the exercise session data and provide a comprehensive, technical summary that includes:
+1. Overall performance assessment
+2. Specific biomechanical observations
+3. Detailed strengths with technical explanations
+4. Areas needing improvement with specific metrics and recommendations
+5. Progress indicators and trends
+
+Use professional terminology appropriate for parents who want detailed information about their child's physical therapy progress.
+Return ONLY a JSON object with this exact structure:
+{
+    "overall_assessment": "Overall performance description",
+    "strengths": ["detailed strength 1", "detailed strength 2"],
+    "improvements_needed": ["detailed improvement area 1", "detailed improvement area 2"],
+    "technical_notes": "Additional technical observations",
+    "recommendations": ["recommendation 1", "recommendation 2"]
+}"""
+                
+                parent_user_prompt = f"""Exercise: {pose_type}
+Session Statistics:
+- Total samples analyzed: {total_samples}
+- Average score: {average_score:.1f}/5
+- Pass rate: {pass_rate:.1f}%
+- All feedback items: {', '.join(all_feedback[:30]) if all_feedback else 'Limited feedback available'}
+
+Detailed metrics from session:
+- Positive feedback instances: {len(all_positive_feedback)}
+- Areas needing attention: {len(all_negative_feedback)}
+
+Generate a comprehensive parent summary with technical details and specific recommendations."""
+                
+                parent_response = openai_client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": parent_system_prompt},
+                        {"role": "user", "content": parent_user_prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=500,
+                    response_format={"type": "json_object"}
+                )
+                
+                parent_summary = json.loads(parent_response.choices[0].message.content)
+            else:
+                return jsonify({
+                    "status": "error",
+                    "message": "OpenAI client not configured"
+                }), 503
+        except ImportError:
+            return jsonify({
+                "status": "error",
+                "message": "OpenAI not available"
+            }), 503
+        except Exception as e:
+            print(f"Error getting OpenAI parent summary: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                "status": "error",
+                "message": f"Error generating parent summary: {str(e)}"
+            }), 500
+        
+        if not parent_summary:
+            return jsonify({
+                "status": "error",
+                "message": "Failed to generate parent summary"
+            }), 500
+        
+        return jsonify({
+            "status": "success",
+            "session_id": session_id,
+            "parent_summary": parent_summary
+        })
+        
+    except Exception as e:
+        print(f"Error getting parent summary: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/data/view', methods=['GET'])

@@ -514,6 +514,7 @@ def get_llm_feedback(result: PoseResult, tone: str = "coach", reading_level: str
     Returns a dict with LLM feedback or None if OpenAI is not configured.
     """
     if not client:
+        print("LLM feedback unavailable: OpenAI client not initialized. Check OPENAI_API_KEY environment variable.")
         return None
     
     try:
