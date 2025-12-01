@@ -736,6 +736,28 @@ body.session-blocked #session-floating-panel {
     border-radius: 18px;
     padding: 20px;
     border: 1px solid rgba(74, 144, 226, 0.15);
+    max-height: 70vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Custom scrollbar styling for session live panel */
+.session-live-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.session-live-panel::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+}
+
+.session-live-panel::-webkit-scrollbar-thumb {
+    background: rgba(74, 144, 226, 0.3);
+    border-radius: 4px;
+}
+
+.session-live-panel::-webkit-scrollbar-thumb:hover {
+    background: rgba(74, 144, 226, 0.5);
 }
 
 .session-live-panel p {
@@ -833,32 +855,10 @@ body.session-blocked #session-floating-panel {
     border-radius: 12px;
     padding: 20px;
     border: 1px solid rgba(74, 144, 226, 0.2);
-    max-height: 60vh;
-    overflow-y: auto;
-    overflow-x: hidden;
 }
 
 .parents-summary-content.hidden {
     display: none;
-}
-
-/* Custom scrollbar styling for parent summary */
-.parents-summary-content::-webkit-scrollbar {
-    width: 8px;
-}
-
-.parents-summary-content::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.05);
-    border-radius: 4px;
-}
-
-.parents-summary-content::-webkit-scrollbar-thumb {
-    background: rgba(74, 144, 226, 0.3);
-    border-radius: 4px;
-}
-
-.parents-summary-content::-webkit-scrollbar-thumb:hover {
-    background: rgba(74, 144, 226, 0.5);
 }
 
 .parents-summary-section {
