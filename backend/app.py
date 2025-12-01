@@ -1,11 +1,17 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import sqlite3
 import json
 import os
 from datetime import datetime
 import math
+import requests
+import io
+from dotenv import load_dotenv
 from validate_pose import evaluate_pose, POSE_DISPATCH, get_llm_feedback
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for cross-origin requests
@@ -1073,6 +1079,77 @@ def live_data_display():
         
     except Exception as e:
         return f"Error loading data: {str(e)}"
+
+@app.route('/api/text-to-speech', methods=['POST'])
+def text_to_speech():
+    """Convert text to speech using Eleven Labs API"""
+    try:
+        data = request.get_json()
+        text = data.get('text', '').strip()
+        
+        if not text:
+            return jsonify({"status": "error", "message": "No text provided"}), 400
+        
+        # Get Eleven Labs API key from environment
+        api_key = os.getenv('ELEVEN_LABS_API_KEY')
+        if not api_key:
+            return jsonify({"status": "error", "message": "Eleven Labs API key not configured"}), 503
+        
+        # Default voice ID (you can make this configurable)
+        voice_id = os.getenv('ELEVEN_LABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM')  # Default: Rachel
+        
+        # Eleven Labs API endpoint
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+        
+        headers = {
+            "Accept": "audio/mpeg",
+            "Content-Type": "application/json",
+            "xi-api-key": api_key
+        }
+        
+        # Use newer model that works with free tier
+        # eleven_turbo_v2 is faster and available on free tier
+        model_id = os.getenv('ELEVEN_LABS_MODEL_ID', 'eleven_turbo_v2')
+        
+        payload = {
+            "text": text,
+            "model_id": model_id,
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75
+            }
+        }
+        
+        # Make request to Eleven Labs
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            error_msg = response.text if response.text else "Unknown error"
+            return jsonify({
+                "status": "error",
+                "message": f"Eleven Labs API error: {error_msg}",
+                "status_code": response.status_code
+            }), response.status_code
+        
+        # Return audio as base64 encoded string
+        import base64
+        audio_base64 = base64.b64encode(response.content).decode('utf-8')
+        
+        return jsonify({
+            "status": "success",
+            "audio": audio_base64,
+            "format": "audio/mpeg"
+        })
+        
+    except requests.exceptions.Timeout:
+        return jsonify({"status": "error", "message": "Request to Eleven Labs timed out"}), 504
+    except requests.exceptions.RequestException as e:
+        return jsonify({"status": "error", "message": f"Network error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"Error in text-to-speech endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
     # Initialize database

@@ -327,6 +327,464 @@ function resolveApiBaseUrl() {
     return `${protocol}//localhost:8001`;
 }
 
+// Eleven Labs Text-to-Speech Service with Queue Management
+class TextToSpeechService {
+    constructor(apiBaseUrl) {
+        this.apiBaseUrl = apiBaseUrl || resolveApiBaseUrl();
+        this.audioQueue = [];
+        this.isPlaying = false;
+        this.currentAudio = null;
+        this.enabled = true; // Can be toggled on/off
+        this.lastSpokenTexts = new Map(); // Track recently spoken texts with timestamps to avoid duplicates
+        this.deduplicationWindow = 2000; // Don't repeat same text within 2 seconds (reduced for real-time feedback)
+        this.allAudioElements = []; // Track all audio elements we create
+        this.abortController = null; // For canceling fetch requests
+    }
+    
+    /**
+     * Enable or disable TTS
+     */
+    setEnabled(enabled) {
+        this.enabled = enabled;
+        if (!enabled) {
+            this.clearQueue();
+        }
+    }
+    
+    /**
+     * Force stop all audio immediately - public method for external calls
+     */
+    forceStop() {
+        console.log('[TTS] Force stop called');
+        this.clearQueue();
+    }
+    
+    /**
+     * Clear the audio queue and stop current playback immediately
+     */
+    clearQueue() {
+        console.log('[TTS] Clearing queue and stopping all audio');
+        this.audioQueue = [];
+        this.lastSpokenTexts.clear(); // Clear deduplication cache
+        this.isPlaying = false; // Set flag first to prevent new audio from starting
+        
+        // Cancel any in-flight fetch requests
+        if (this.abortController) {
+            console.log('[TTS] Aborting in-flight fetch requests');
+            this.abortController.abort();
+            this.abortController = null;
+        }
+        
+        // Cancel any in-flight fetch requests
+        if (this.abortController) {
+            console.log('[TTS] Aborting in-flight fetch requests');
+            this.abortController.abort();
+            this.abortController = null;
+        }
+        
+        // Stop all tracked audio elements
+        this.allAudioElements.forEach(audio => {
+            try {
+                if (audio && !audio.paused) {
+                    console.log('[TTS] Stopping tracked audio element');
+                    audio.volume = 0;
+                    audio.pause();
+                    audio.currentTime = 0;
+                    audio.src = '';
+                    audio.load();
+                }
+            } catch (error) {
+                console.error('[TTS] Error stopping tracked audio:', error);
+            }
+        });
+        this.allAudioElements = [];
+        
+        // Aggressively stop current audio playback
+        if (this.currentAudio) {
+            try {
+                const audio = this.currentAudio;
+                console.log('[TTS] Stopping currentAudio, paused:', audio.paused, 'currentTime:', audio.currentTime);
+                // Set volume to 0 first to mute immediately
+                audio.volume = 0;
+                // Pause the audio
+                if (!audio.paused) {
+                    audio.pause();
+                }
+                // Reset to beginning
+                audio.currentTime = 0;
+                // Clear source
+                audio.src = '';
+                audio.srcObject = null;
+                // Load to stop buffering
+                audio.load();
+                // Remove from DOM if it was added
+                if (audio.parentNode) {
+                    audio.parentNode.removeChild(audio);
+                }
+            } catch (error) {
+                console.error('[TTS] Error stopping audio:', error);
+            }
+            this.currentAudio = null;
+        }
+        
+        // Also try to stop ANY audio elements that might be playing (nuclear option)
+        // This is a fallback in case currentAudio reference is lost
+        try {
+            const allAudioElements = document.querySelectorAll('audio');
+            allAudioElements.forEach(audio => {
+                try {
+                    if (!audio.paused || audio.src) {
+                        console.log('[TTS] Force stopping audio element:', audio.src);
+                        audio.volume = 0;
+                        audio.pause();
+                        audio.currentTime = 0;
+                        if (audio.src && audio.src.startsWith('blob:')) {
+                            URL.revokeObjectURL(audio.src);
+                        }
+                        audio.src = '';
+                        audio.srcObject = null;
+                        audio.load();
+                    }
+                } catch (err) {
+                    // Ignore errors for individual elements
+                }
+            });
+        } catch (error) {
+            console.error('[TTS] Error stopping orphaned audio:', error);
+        }
+        
+        console.log('[TTS] Queue cleared and audio stopped');
+    }
+    
+    /**
+     * Add text to the speech queue
+     */
+    async speak(text, priority = false) {
+        if (!this.enabled || !text || !text.trim()) {
+            console.log('[TTS] Skipping - service disabled or empty text');
+            return;
+        }
+        
+        // Clean up text - remove emojis and extra whitespace
+        const cleanText = text.replace(/[💬👉💪⚠️🎯🔄]/g, '').trim();
+        if (!cleanText) {
+            console.log('[TTS] Skipping - text empty after cleaning');
+            return;
+        }
+        
+        // Check if we've spoken this text recently (deduplication)
+        const now = Date.now();
+        const lastSpokenTime = this.lastSpokenTexts.get(cleanText);
+        
+        if (lastSpokenTime && (now - lastSpokenTime) < this.deduplicationWindow) {
+            const timeSinceLastSpoken = now - lastSpokenTime;
+            console.log(`[TTS] Skipping duplicate text (spoken ${timeSinceLastSpoken}ms ago):`, cleanText);
+            return; // Skip if already spoken recently
+        }
+        
+        console.log('[TTS] Adding to queue:', cleanText, 'Priority:', priority);
+        
+        // Add to recently spoken map with timestamp
+        this.lastSpokenTexts.set(cleanText, now);
+        
+        // Clean up old entries periodically
+        for (const [text, timestamp] of this.lastSpokenTexts.entries()) {
+            if (now - timestamp > this.deduplicationWindow * 2) {
+                this.lastSpokenTexts.delete(text);
+            }
+        }
+        
+        if (priority) {
+            // Add to front of queue for priority messages (like safety flags)
+            this.audioQueue.unshift(cleanText);
+        } else {
+            this.audioQueue.push(cleanText);
+        }
+        
+        // Start processing queue if not already playing
+        if (!this.isPlaying) {
+            this.processQueue();
+        }
+    }
+    
+    /**
+     * Process the audio queue sequentially
+     */
+    async processQueue() {
+        if (this.isPlaying || this.audioQueue.length === 0) {
+            return;
+        }
+        
+        this.isPlaying = true;
+        console.log('[TTS] Starting to process queue, items:', this.audioQueue.length);
+        
+        while (this.audioQueue.length > 0 && this.isPlaying) {
+            // Check if we should stop before processing next item
+            if (!this.isPlaying) {
+                console.log('[TTS] Stopping queue processing - isPlaying is false');
+                break;
+            }
+            
+            const text = this.audioQueue.shift();
+            console.log('[TTS] Processing:', text);
+            
+            try {
+                // Fetch audio from backend
+                const audioData = await this.fetchAudio(text);
+                
+                // Check again after fetch (might have been cleared during fetch)
+                if (!this.isPlaying) {
+                    console.log('[TTS] Stopping - queue was cleared during fetch');
+                    if (audioData) {
+                        URL.revokeObjectURL(audioData);
+                    }
+                    break;
+                }
+                
+                if (audioData) {
+                    console.log('[TTS] Audio fetched, playing...');
+                    // Play audio and wait for it to finish
+                    await this.playAudio(audioData);
+                    console.log('[TTS] Audio playback completed');
+                } else {
+                    console.warn('[TTS] No audio data returned for:', text);
+                }
+            } catch (error) {
+                console.error('[TTS] Error processing audio:', error);
+                // Continue with next item in queue even if one fails
+            }
+        }
+        
+        this.isPlaying = false;
+        console.log('[TTS] Queue processing complete');
+    }
+    
+    /**
+     * Fetch audio from backend TTS endpoint
+     */
+    async fetchAudio(text) {
+        // Check if we should stop before fetching
+        if (!this.isPlaying) {
+            console.log('[TTS] Not fetching - queue was cleared');
+            return null;
+        }
+        
+        // Create new abort controller for this request
+        this.abortController = new AbortController();
+        const signal = this.abortController.signal;
+        
+        try {
+            console.log('[TTS] Fetching audio for text:', text.substring(0, 50) + '...');
+            const response = await fetch(`${this.apiBaseUrl}/api/text-to-speech`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text: text }),
+                signal: signal // Add abort signal
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const errorMsg = errorData.message || `HTTP error! status: ${response.status}`;
+                console.error('[TTS] API error:', errorMsg, errorData);
+                throw new Error(errorMsg);
+            }
+            
+            const data = await response.json();
+            if (data.status === 'success' && data.audio) {
+                console.log('[TTS] Successfully received audio data');
+                // Convert base64 to blob
+                const audioBlob = this.base64ToBlob(data.audio, data.format || 'audio/mpeg');
+                return URL.createObjectURL(audioBlob);
+            } else {
+                const errorMsg = data.message || 'Failed to get audio';
+                console.error('[TTS] Invalid response:', data);
+                throw new Error(errorMsg);
+            }
+        } catch (error) {
+            // Check if this was an abort
+            if (error.name === 'AbortError') {
+                console.log('[TTS] Fetch aborted - queue was cleared');
+                return null;
+            }
+            console.error('[TTS] Error fetching TTS audio:', error);
+            // Don't fail silently - log the full error
+            if (error.message && error.message.includes('API key')) {
+                console.error('[TTS] Eleven Labs API key may not be configured. Check backend/.env file');
+            }
+            return null;
+        }
+    }
+    
+    /**
+     * Convert base64 string to Blob
+     */
+    base64ToBlob(base64, mimeType) {
+        const byteCharacters = atob(base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        return new Blob([byteArray], { type: mimeType });
+    }
+    
+    /**
+     * Play audio and return a promise that resolves when playback completes
+     */
+    playAudio(audioUrl) {
+        return new Promise((resolve, reject) => {
+            // Check if we should stop before starting new audio
+            if (!this.isPlaying) {
+                console.log('[TTS] Not playing - queue was cleared');
+                URL.revokeObjectURL(audioUrl);
+                resolve();
+                return;
+            }
+            
+            const audio = new Audio(audioUrl);
+            this.currentAudio = audio;
+            this.allAudioElements.push(audio); // Track this audio element
+            
+            // Store resolve/reject to handle cancellation
+            audio._resolve = resolve;
+            audio._reject = reject;
+            audio._url = audioUrl;
+            
+            audio.onended = () => {
+                console.log('[TTS] Audio playback ended');
+                if (this.currentAudio === audio) {
+                    URL.revokeObjectURL(audioUrl); // Clean up blob URL
+                    this.currentAudio = null;
+                }
+                resolve();
+            };
+            
+            audio.onerror = (error) => {
+                // Don't log as error if we intentionally stopped it
+                if (!this.isPlaying) {
+                    console.log('[TTS] Audio error (expected - queue was cleared):', error);
+                    URL.revokeObjectURL(audioUrl);
+                    if (this.currentAudio === audio) {
+                        this.currentAudio = null;
+                    }
+                    resolve(); // Resolve instead of reject since this is expected
+                } else {
+                    console.error('[TTS] Audio playback error:', error);
+                    if (this.currentAudio === audio) {
+                        URL.revokeObjectURL(audioUrl);
+                        this.currentAudio = null;
+                    }
+                    reject(error);
+                }
+            };
+            
+            audio.onloadstart = () => {
+                console.log('[TTS] Audio loading started');
+            };
+            
+            audio.oncanplay = () => {
+                console.log('[TTS] Audio ready to play');
+            };
+            
+            audio.play().then(() => {
+                console.log('[TTS] Audio play() called successfully');
+            }).catch((playError) => {
+                console.error('[TTS] Audio play() failed:', playError);
+                // Common issue: browser autoplay policy - user interaction required
+                if (playError.name === 'NotAllowedError') {
+                    console.warn('[TTS] Browser blocked autoplay. User interaction may be required.');
+                }
+                reject(playError);
+            });
+        });
+    }
+    
+    /**
+     * Extract and speak feedback from LLM feedback object
+     */
+    speakFeedback(feedback) {
+        if (!this.enabled || !feedback) {
+            console.log('[TTS] Service disabled or no feedback provided');
+            return;
+        }
+        
+        console.log('[TTS] Processing feedback for speech:', feedback);
+        
+        const textsToSpeak = [];
+        
+        // Priority order: safety flags first, then summary, cues, encouragement
+        if (feedback.safety_flags && feedback.safety_flags.length > 0) {
+            feedback.safety_flags.forEach(flag => {
+                if (flag && flag.trim()) {
+                    textsToSpeak.push({ text: flag, priority: true });
+                }
+            });
+        }
+        
+        if (feedback.summary && feedback.summary.trim()) {
+            textsToSpeak.push({ text: feedback.summary, priority: false });
+        }
+        
+        if (feedback.cues && feedback.cues.length > 0) {
+            feedback.cues.forEach(cue => {
+                // Try multiple possible fields
+                const actionText = cue.action || cue.issue || (typeof cue === 'string' ? cue : null);
+                if (actionText && actionText.trim()) {
+                    textsToSpeak.push({ text: actionText, priority: false });
+                }
+            });
+        }
+        
+        if (feedback.encouragement && feedback.encouragement.trim()) {
+            textsToSpeak.push({ text: feedback.encouragement, priority: false });
+        }
+        
+        // Fallback: if no structured feedback, try to extract any text
+        if (textsToSpeak.length === 0) {
+            // Try to find any string values in the feedback object
+            for (const [key, value] of Object.entries(feedback)) {
+                if (typeof value === 'string' && value.trim()) {
+                    textsToSpeak.push({ text: value, priority: false });
+                    break; // Just use the first string we find
+                } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
+                    textsToSpeak.push({ text: value[0], priority: false });
+                    break;
+                }
+            }
+        }
+        
+        console.log('[TTS] Extracted texts to speak:', textsToSpeak);
+        
+        if (textsToSpeak.length === 0) {
+            console.warn('[TTS] No text extracted from feedback object');
+            return;
+        }
+        
+        // Speak all texts in order
+        textsToSpeak.forEach(({ text, priority }) => {
+            this.speak(text, priority);
+        });
+    }
+    
+    /**
+     * Speak basic feedback array
+     */
+    speakBasicFeedback(feedbackArray) {
+        if (!this.enabled || !feedbackArray || feedbackArray.length === 0) {
+            console.log('[TTS] Service disabled or no feedback array provided');
+            return;
+        }
+        
+        console.log('[TTS] Processing basic feedback array:', feedbackArray);
+        
+        feedbackArray.forEach(feedback => {
+            this.speak(feedback);
+        });
+    }
+}
+
 // Enhanced REST approach with polling for real-time feedback
 class RealTimeFeedbackREST {
     constructor(apiBaseUrl) {
@@ -337,6 +795,10 @@ class RealTimeFeedbackREST {
         this.backendUnavailable = false;
         this.backendWarningShown = false;
         this.apiBaseUrl = apiBaseUrl || resolveApiBaseUrl();
+        
+        // Initialize TTS service
+        this.ttsService = new TextToSpeechService(this.apiBaseUrl);
+        console.log('[TTS] TTS service initialized with API base URL:', this.apiBaseUrl);
         
         // UI elements
         this.poseTypeSelect = document.getElementById('pose-type-select');
@@ -393,10 +855,21 @@ class RealTimeFeedbackREST {
         
         // Start polling every 500ms for validation
         this.pollingInterval = setInterval(async () => {
+            // Check if we're still active before processing
+            if (!this.isActive) {
+                console.log('[Feedback] Polling stopped - feedback system is inactive');
+                return;
+            }
+            
             if (this.lastPoseData && this.lastPoseData.poseLandmarks) {
                 try {
                     const feedback = await this.validatePose(this.currentPoseType, this.lastPoseData);
-                    this.displayFeedback(feedback);
+                    // Double-check we're still active before displaying (race condition protection)
+                    if (this.isActive) {
+                        this.displayFeedback(feedback);
+                    } else {
+                        console.log('[Feedback] Skipping feedback display - system is inactive');
+                    }
                 } catch (error) {
                     if (this.backendUnavailable) {
                         this.showError('Real-time feedback is offline. Enable the PT backend and press Start again.');
@@ -413,14 +886,27 @@ class RealTimeFeedbackREST {
     }
     
     stopRealTimeFeedback(preserveDisplay = false) {
-        if (!this.isActive) return;
+        if (!this.isActive) {
+            console.log('[Feedback] Already stopped, ignoring stopRealTimeFeedback call');
+            return;
+        }
         
+        console.log('[Feedback] Stopping real-time feedback');
+        
+        // Set inactive flag FIRST to prevent new feedback from being processed
         this.isActive = false;
         
-        // Clear polling interval
+        // Clear polling interval IMMEDIATELY to stop new requests
         if (this.pollingInterval) {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
+            console.log('[Feedback] Polling interval cleared');
+        }
+        
+        // Clear TTS queue AFTER stopping polling - use forceStop for maximum effect
+        if (this.ttsService) {
+            console.log('[TTS] Force stopping TTS in stopRealTimeFeedback');
+            this.ttsService.forceStop();
         }
         
         // Update UI
@@ -484,6 +970,12 @@ class RealTimeFeedbackREST {
     }
     
     displayFeedback(feedback) {
+        // Check if feedback system is still active before processing
+        if (!this.isActive) {
+            console.log('[Feedback] Skipping displayFeedback - system is inactive');
+            return;
+        }
+        
         // Update score with star rating (1-5 scale)
         if (feedback.score) {
             const stars = '★'.repeat(feedback.score) + '☆'.repeat(5 - feedback.score);
@@ -499,12 +991,27 @@ class RealTimeFeedbackREST {
         console.log('Feedback received:', feedback);
         console.log('LLM Feedback:', feedback.llm_feedback);
         
+        // Double-check we're still active before speaking (race condition protection)
+        if (!this.isActive) {
+            console.log('[Feedback] Skipping TTS - system became inactive');
+            return;
+        }
+        
         if (feedback.llm_feedback) {
             console.log('Displaying LLM feedback');
             this.updateLLMFeedbackDisplay(feedback.llm_feedback);
+            // Speak LLM feedback using TTS (only LLM feedback, not basic code feedback)
+            // Check one more time before speaking
+            if (this.isActive && this.ttsService) {
+                console.log('[TTS] Calling speakFeedback with:', feedback.llm_feedback);
+                this.ttsService.speakFeedback(feedback.llm_feedback);
+            }
         } else {
             console.log('No LLM feedback, showing basic feedback');
             this.updateFeedbackList(feedback.feedback || []);
+            // DO NOT speak basic feedback - only speak LLM/OpenAI feedback
+            // Basic feedback contains numbers and technical details that shouldn't be spoken
+            console.log('[TTS] Skipping basic feedback - only LLM feedback is spoken');
         }
         
         // Add visual feedback based on score
@@ -1654,9 +2161,15 @@ class GuidedSessionModal {
     }
     
     pauseSession() {
+        console.log('[Session] Pause button clicked');
         this.state = 'paused';
         this.clearTimer();
         if (this.feedbackSystem) {
+            // Stop TTS IMMEDIATELY before stopping feedback - use forceStop for maximum effect
+            if (this.feedbackSystem.ttsService) {
+                console.log('[Session] Force stopping TTS on pause');
+                this.feedbackSystem.ttsService.forceStop();
+            }
             this.feedbackSystem.stopRealTimeFeedback(true);
         }
         this.hideFloatingPanel();
@@ -1689,8 +2202,14 @@ class GuidedSessionModal {
     }
     
     stopSession() {
+        console.log('[Session] Stop button clicked');
         this.clearTimer();
         if (this.feedbackSystem) {
+            // Stop TTS IMMEDIATELY before stopping feedback - use forceStop for maximum effect
+            if (this.feedbackSystem.ttsService) {
+                console.log('[Session] Force stopping TTS on stop');
+                this.feedbackSystem.ttsService.forceStop();
+            }
             this.feedbackSystem.stopRealTimeFeedback();
         }
         this.toggleLivePanel(false);
@@ -1699,9 +2218,15 @@ class GuidedSessionModal {
     }
     
     async completeExercise() {
+        console.log('[Session] Exercise completed - timer reached 0');
         this.state = 'finished';
         this.clearTimer();
         if (this.feedbackSystem) {
+            // Stop TTS IMMEDIATELY when exercise completes, before stopping feedback - use forceStop
+            if (this.feedbackSystem.ttsService) {
+                console.log('[Session] Force stopping TTS on exercise completion');
+                this.feedbackSystem.ttsService.forceStop();
+            }
             this.feedbackSystem.stopRealTimeFeedback(true);
         }
         this.toggleConfig(true);
@@ -2018,6 +2543,7 @@ class GuidedSessionModal {
     }
     
     handlePrimaryAction() {
+        console.log('[Session] Primary button clicked, state:', this.state);
         switch (this.state) {
             case 'permission':
                 this.requestPermissionFlow();
@@ -2026,6 +2552,7 @@ class GuidedSessionModal {
                 this.startExerciseSession();
                 break;
             case 'running':
+                console.log('[Session] Primary button - pausing session');
                 this.pauseSession();
                 break;
             case 'paused':
@@ -2040,12 +2567,14 @@ class GuidedSessionModal {
     }
     
     handleSecondaryAction() {
+        console.log('[Session] Secondary button clicked, state:', this.state);
         switch (this.state) {
             case 'exercise':
                 this.showPermissionStep();
                 break;
             case 'running':
             case 'paused':
+                console.log('[Session] Secondary button - stopping session');
                 this.stopSession();
                 break;
             case 'finished':
@@ -2214,6 +2743,7 @@ class GuidedSessionModal {
     }
     
     handleFloatingPause() {
+        console.log('[Session] Floating pause button clicked, state:', this.state);
         if (this.state === 'running') {
             this.pauseSession();
         } else if (this.state === 'paused') {
@@ -2222,6 +2752,7 @@ class GuidedSessionModal {
     }
     
     handleFloatingStop() {
+        console.log('[Session] Floating stop button clicked');
         this.stopSession();
     }
     
