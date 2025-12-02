@@ -339,6 +339,8 @@ class TextToSpeechService {
         this.deduplicationWindow = 2000; // Don't repeat same text within 2 seconds (reduced for real-time feedback)
         this.allAudioElements = []; // Track all audio elements we create
         this.abortController = null; // For canceling fetch requests
+        this.speakingLock = false; // Lock to prevent overlapping speakImmediately calls
+        this.pendingSpeech = null; // Store pending speech if one is already playing
     }
     
     /**
@@ -360,6 +362,105 @@ class TextToSpeechService {
     }
     
     /**
+     * Speak text immediately without queue - waits for current audio to finish if playing
+     * Used for time-sensitive feedback that shouldn't be delayed
+     */
+    async speakImmediately(text) {
+        if (!this.enabled || !text || !text.trim()) {
+            return;
+        }
+        
+        // Clean up text - remove emojis and extra whitespace
+        const cleanText = text.replace(/[💬👉💪⚠️🎯🔄]/g, '').trim();
+        if (!cleanText) {
+            return;
+        }
+        
+        // Prevent overlapping calls - if already speaking, store this as pending
+        if (this.speakingLock) {
+            console.log('[TTS] Already speaking, storing as pending:', cleanText);
+            this.pendingSpeech = cleanText; // Store the latest pending speech (overwrites previous)
+            return;
+        }
+        
+        console.log('[TTS] Speaking immediately (no queue):', cleanText);
+        
+        // Set lock to prevent overlapping calls
+        this.speakingLock = true;
+        
+        try {
+            // If audio is currently playing, wait for it to finish before starting new audio
+            // This prevents cutting off audio mid-sentence
+            if (this.currentAudio && !this.currentAudio.paused && !this.currentAudio.ended) {
+                console.log('[TTS] Audio currently playing, waiting for it to finish...');
+                try {
+                    // Wait for current audio to finish using Promise
+                    await new Promise((resolve) => {
+                        // Set a timeout in case audio gets stuck
+                        const timeout = setTimeout(() => {
+                            console.warn('[TTS] Timeout waiting for audio to finish');
+                            resolve(); // Continue anyway after 5 seconds
+                        }, 5000);
+                        
+                        // Listen for ended event
+                        if (this.currentAudio) {
+                            const onEnded = () => {
+                                clearTimeout(timeout);
+                                resolve();
+                            };
+                            this.currentAudio.addEventListener('ended', onEnded, { once: true });
+                            // Also check if it's already ended
+                            if (this.currentAudio.ended) {
+                                clearTimeout(timeout);
+                                resolve();
+                            }
+                        } else {
+                            clearTimeout(timeout);
+                            resolve();
+                        }
+                    });
+                    console.log('[TTS] Previous audio finished, starting new audio');
+                } catch (error) {
+                    console.error('[TTS] Error waiting for audio:', error);
+                }
+            }
+            
+            // Clear queue but don't stop current audio (it should have finished by now)
+            this.audioQueue = [];
+            // Don't clear lastSpokenTexts here - let deduplication work naturally
+            
+            // Set isPlaying to true so fetchAudio doesn't reject
+            this.isPlaying = true;
+            
+            // Fetch and play immediately (allow fetch even if queue was cleared)
+            const audioData = await this.fetchAudio(cleanText, true);
+            
+            if (audioData) {
+                // Play audio immediately
+                await this.playAudio(audioData);
+            }
+        } catch (error) {
+            console.error('[TTS] Error in speakImmediately:', error);
+        } finally {
+            // Reset flags after audio finishes or errors
+            this.isPlaying = false;
+            this.speakingLock = false;
+            console.log('[TTS] speakImmediately completed, lock released');
+            
+            // If there's pending speech, speak it now
+            if (this.pendingSpeech) {
+                const pending = this.pendingSpeech;
+                this.pendingSpeech = null; // Clear before calling to avoid recursion
+                console.log('[TTS] Processing pending speech:', pending);
+                // Small delay to ensure current audio cleanup is complete
+                setTimeout(() => {
+                    this.speakImmediately(pending);
+                }, 100);
+            }
+        }
+    }
+    
+    /**
      * Clear the audio queue and stop current playback immediately
      */
     clearQueue() {
@@ -367,13 +468,8 @@ class TextToSpeechService {
         this.audioQueue = [];
         this.lastSpokenTexts.clear(); // Clear deduplication cache
         this.isPlaying = false; // Set flag first to prevent new audio from starting
-        
-        // Cancel any in-flight fetch requests
-        if (this.abortController) {
-            console.log('[TTS] Aborting in-flight fetch requests');
-            this.abortController.abort();
-            this.abortController = null;
-        }
+        this.speakingLock = false; // Release lock to allow new speech
+        this.pendingSpeech = null; // Clear any pending speech
         
         // Cancel any in-flight fetch requests
         if (this.abortController) {
@@ -562,9 +658,9 @@ class TextToSpeechService {
     /**
      * Fetch audio from backend TTS endpoint
      */
-    async fetchAudio(text) {
-        // Check if we should stop before fetching
-        if (!this.isPlaying) {
+    async fetchAudio(text, allowWhenNotPlaying = false) {
+        // Check if we should stop before fetching (unless allowWhenNotPlaying is true for immediate speech)
+        if (!this.isPlaying && !allowWhenNotPlaying) {
             console.log('[TTS] Not fetching - queue was cleared');
             return null;
         }
@@ -795,6 +891,7 @@ class RealTimeFeedbackREST {
         this.backendUnavailable = false;
         this.backendWarningShown = false;
         this.apiBaseUrl = apiBaseUrl || resolveApiBaseUrl();
+        this.lastFeedbackWasGood = null; // Track last feedback state for smart TTS
         
         // Initialize TTS service
         this.ttsService = new TextToSpeechService(this.apiBaseUrl);
@@ -853,8 +950,11 @@ class RealTimeFeedbackREST {
         // Clear previous feedback
         this.clearFeedback();
         
-        // Start polling every 500ms for validation
-        this.pollingInterval = setInterval(async () => {
+        // Reset feedback state tracking
+        this.lastFeedbackWasGood = null;
+        
+        // Poll immediately for instant feedback, then continue with interval
+        const pollForFeedback = async () => {
             // Check if we're still active before processing
             if (!this.isActive) {
                 console.log('[Feedback] Polling stopped - feedback system is inactive');
@@ -880,9 +980,15 @@ class RealTimeFeedbackREST {
                     }
                 }
             }
-        }, 500);
+        };
         
-        console.log(`Started real-time feedback for ${this.currentPoseType}`);
+        // Make immediate call for instant feedback
+        pollForFeedback();
+        
+        // Then start polling every 1 second for subsequent feedback
+        this.pollingInterval = setInterval(pollForFeedback, 1000);
+        
+        console.log(`Started real-time feedback for ${this.currentPoseType} (immediate + interval)`);
     }
     
     stopRealTimeFeedback(preserveDisplay = false) {
@@ -895,6 +1001,9 @@ class RealTimeFeedbackREST {
         
         // Set inactive flag FIRST to prevent new feedback from being processed
         this.isActive = false;
+        
+        // Reset feedback state tracking
+        this.lastFeedbackWasGood = null;
         
         // Clear polling interval IMMEDIATELY to stop new requests
         if (this.pollingInterval) {
@@ -1000,11 +1109,42 @@ class RealTimeFeedbackREST {
         if (feedback.llm_feedback) {
             console.log('Displaying LLM feedback');
             this.updateLLMFeedbackDisplay(feedback.llm_feedback);
-            // Speak LLM feedback using TTS (only LLM feedback, not basic code feedback)
-            // Check one more time before speaking
-            if (this.isActive && this.ttsService) {
-                console.log('[TTS] Calling speakFeedback with:', feedback.llm_feedback);
-                this.ttsService.speakFeedback(feedback.llm_feedback);
+            
+            // Smart TTS logic based on feedback state transitions
+            // Determine if current feedback is good (pass = true and score >= 4)
+            const currentFeedbackIsGood = feedback.pass && feedback.score >= 4;
+            
+            // Smart TTS logic:
+            // 1. If feedback is bad → speak corrections (cues from purple bubbles)
+            // 2. If feedback is good → speak encouragement (always, regardless of previous state)
+            let shouldSpeak = false;
+            let textToSpeak = null;
+            
+            if (!currentFeedbackIsGood) {
+                // Bad feedback - speak corrections (cues from purple bubbles)
+                shouldSpeak = true;
+                if (feedback.llm_feedback.cues && feedback.llm_feedback.cues.length > 0) {
+                    // Only speak the first cue (action text from purple bubble)
+                    const firstCue = feedback.llm_feedback.cues[0];
+                    textToSpeak = firstCue.action || firstCue.issue || null;
+                }
+            } else if (currentFeedbackIsGood) {
+                // Good feedback - always speak encouragement
+                shouldSpeak = true;
+                textToSpeak = feedback.llm_feedback.encouragement || 'Great job!';
+            }
+            
+            // Update last feedback state
+            this.lastFeedbackWasGood = currentFeedbackIsGood;
+            
+            // Speak immediately if needed (no queue to avoid delays)
+            if (shouldSpeak && textToSpeak && this.isActive && this.ttsService) {
+                console.log('[TTS] Speaking immediately:', textToSpeak, 'Reason: bad feedback =', !currentFeedbackIsGood, 'good feedback =', currentFeedbackIsGood);
+                // Don't clear queue here - speakImmediately will handle waiting for current audio
+                // This prevents cutting off audio that's currently playing
+                this.ttsService.speakImmediately(textToSpeak);
+            } else {
+                console.log('[TTS] Skipping TTS - shouldSpeak:', shouldSpeak, 'textToSpeak:', textToSpeak, 'currentGood:', currentFeedbackIsGood, 'lastGood:', this.lastFeedbackWasGood);
             }
         } else {
             console.log('No LLM feedback, showing basic feedback');
@@ -1290,8 +1430,13 @@ waitForMediaPipe() {
         try {
                 this.updateStatus('Starting camera...', 'loading');
             
-            const newSessionId = this.createNewSession();
-            this.notifyNewSession(newSessionId);
+            // Only create new session if one doesn't exist
+            // (Session creation is now handled by GuidedSessionModal when starting exercise)
+            let sessionId = localStorage.getItem('ptpal_session_id');
+            if (!sessionId) {
+                const newSessionId = this.createNewSession();
+                this.notifyNewSession(newSessionId);
+            }
             
                 if (!this.permissionGranted) {
                     await this.requestCameraPermission();
@@ -2092,6 +2237,12 @@ class GuidedSessionModal {
             this.primaryBtn.disabled = true;
         }
         try {
+            // Create a new session ID for this exercise session
+            // This ensures each exercise gets its own separate session and summary
+            const newSessionId = this.webcamManager.createNewSession();
+            console.log('[Session] Created new session ID for exercise:', newSessionId);
+            await this.webcamManager.notifyNewSession(newSessionId);
+            
             // Start camera first
             await this.webcamManager.requestCameraPermission();
             await this.webcamManager.ensureCameraStarted();
@@ -2390,6 +2541,15 @@ class GuidedSessionModal {
     }
     
     displaySummary(summary) {
+        // Calculate star rating from average score
+        let starsHtml = '';
+        if (summary.average_score) {
+            const score = Math.round(summary.average_score); // Round to nearest integer for star display
+            const filledStars = '★'.repeat(score);
+            const emptyStars = '☆'.repeat(5 - score);
+            starsHtml = `<div class="summary-stars">${filledStars}${emptyStars}</div>`;
+        }
+        
         // Update title with score info
         const scoreText = summary.average_score ? ` (Average Score: ${summary.average_score.toFixed(1)}/5)` : '';
         this.setTitle(`Great job!${scoreText}`, 'Here\'s how you did:');
@@ -2412,6 +2572,7 @@ class GuidedSessionModal {
             // Create or update summary HTML
             let summaryHtml = `
                 <div class="session-summary">
+                    ${starsHtml}
                     <div class="summary-section summary-positive">
                         <h4 class="summary-title">What You Did Well:</h4>
                         <ul class="summary-list" id="summary-what-went-well"></ul>
@@ -2428,6 +2589,26 @@ class GuidedSessionModal {
             if (!summaryContainer) {
                 livePanel.insertAdjacentHTML('beforeend', summaryHtml);
                 summaryContainer = livePanel.querySelector('.session-summary');
+            } else {
+                // Update existing summary with stars if they don't exist
+                if (summary.average_score && !summaryContainer.querySelector('.summary-stars')) {
+                    const starsHtml = (() => {
+                        const score = Math.round(summary.average_score);
+                        const filledStars = '★'.repeat(score);
+                        const emptyStars = '☆'.repeat(5 - score);
+                        return `<div class="summary-stars">${filledStars}${emptyStars}</div>`;
+                    })();
+                    summaryContainer.insertAdjacentHTML('afterbegin', starsHtml);
+                } else if (summary.average_score) {
+                    // Update existing stars
+                    const starsElement = summaryContainer.querySelector('.summary-stars');
+                    if (starsElement) {
+                        const score = Math.round(summary.average_score);
+                        const filledStars = '★'.repeat(score);
+                        const emptyStars = '☆'.repeat(5 - score);
+                        starsElement.textContent = filledStars + emptyStars;
+                    }
+                }
             }
             
             // Add parents summary button (summary will be loaded on-demand)
@@ -2658,12 +2839,18 @@ class GuidedSessionModal {
     repeatExercise() {
         this.hideSummary();
         this.remainingSeconds = this.exerciseDuration;
+        // Clear the current session ID so a new one will be created for the repeat
+        localStorage.removeItem('ptpal_session_id');
+        console.log('[Session] Cleared session ID - new one will be created for repeat exercise');
         this.startExerciseSession();
     }
     
     chooseNewExercise() {
         this.hideSummary();
         this.toggleLivePanel(false);
+        // Clear the current session ID so a new one will be created for the next exercise
+        localStorage.removeItem('ptpal_session_id');
+        console.log('[Session] Cleared session ID - new one will be created for next exercise');
         this.showExerciseSetup();
     }
     

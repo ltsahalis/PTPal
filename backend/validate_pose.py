@@ -54,10 +54,10 @@ except ImportError:
 @dataclass
 class Thresholds:
     # Partial Squat
-    squat_min_depth_deg: float = 150.0     # knee flexion ≤ this → adequate depth (not too straight)
-    squat_max_depth_deg: float = 80.0    # knee flexion ≥ this → not too deep (not too bent)
+    squat_min_depth_deg: float = 140.0     # knee flexion ≤ this → adequate depth (not too straight) - adjusted for partial squat (was 150°)
+    squat_max_depth_deg: float = 100.0     # knee flexion ≥ this → not too deep (not too bent) - adjusted for partial squat (was 80°)
     squat_max_forward_lean_deg: float = 35.0
-    squat_max_knee_valgus_deg: float = 10.0  # frontal knee collapse beyond this
+    squat_max_knee_valgus_deg: float = 15.0  # frontal knee collapse beyond this - increased threshold (was 10°) since current measurement is approximate
     squat_max_heel_lift_cm: float = 5.0
 
     # Heel Raises
@@ -141,14 +141,21 @@ def validate_partial_squat(metrics: Dict[str, float], th: Thresholds = Threshold
 
     reasons: List[str] = []
     fails = 0
+    # Start with 5 checks, but reduce if facing sideways (skip knee alignment)
     checks = 5
+    is_facing_sideways = metrics.get("is_facing_sideways", False)
+    if is_facing_sideways:
+        checks = 4  # Skip knee alignment check when facing sideways
 
     fails += _bool_fail(metrics["knee_flexion_deg"] > th.squat_min_depth_deg,
                         f"Go deeper: knee flexion {metrics['knee_flexion_deg']:.0f}° > {th.squat_min_depth_deg:.0f}°.", reasons)
     fails += _bool_fail(metrics["knee_flexion_deg"] < th.squat_max_depth_deg,
                         f"Don't go too deep: knee flexion {metrics['knee_flexion_deg']:.0f}° < {th.squat_max_depth_deg:.0f}°.", reasons)
-    fails += _bool_fail(abs(metrics["hip_knee_ankle_alignment_deg"]) > th.squat_max_knee_valgus_deg,
-                        f"Knees in line: valgus/varus {metrics['hip_knee_ankle_alignment_deg']:.0f}° > {th.squat_max_knee_valgus_deg:.0f}°.", reasons)
+    # Only check knee alignment if facing forward (not sideways)
+    # When facing sideways, knees should be apart, so this check doesn't apply
+    if not is_facing_sideways:
+        fails += _bool_fail(abs(metrics["hip_knee_ankle_alignment_deg"]) > th.squat_max_knee_valgus_deg,
+                            f"Knees in line: valgus/varus {metrics['hip_knee_ankle_alignment_deg']:.0f}° > {th.squat_max_knee_valgus_deg:.0f}°.", reasons)
     fails += _bool_fail(metrics["heel_height_cm"] > th.squat_max_heel_lift_cm,
                         f"Keep heels down: heel lift {metrics['heel_height_cm']:.1f} cm > {th.squat_max_heel_lift_cm:.1f} cm.", reasons)
     fails += _bool_fail(metrics["trunk_forward_lean_deg"] > th.squat_max_forward_lean_deg,
@@ -464,22 +471,54 @@ LLM_OUTPUT_SCHEMA = {
 }
 
 LLM_SYSTEM_PROMPT = (
-    "You are PT Pal, a physical-therapy coaching assistant for kids age 5-9. "
-    "CRITICAL: Keep ALL messages extremely brief - MAXIMUM 3-5 WORDS EACH. "
-    "Use only the metrics and reasons provided. "
-    "Do not make diagnoses or medical claims. Do not invent new measurements. "
-    "Return a STRICT JSON object that matches the provided JSON Schema exactly. "
-    "Limit to at most 3 concrete cues. Each cue must include a plain-language ACTION. "
-    "Examples: 'Bend knees more', 'Keep heels down', 'Stand taller', 'Great job!'"
+    "You are PT Pal, a friendly physical-therapy coaching assistant for kids age 4-9. "
+    "CRITICAL RULES FOR FEEDBACK: "
+    "1. Keep ALL messages extremely brief - MAXIMUM 4-6 WORDS EACH. "
+    "2. Use SIMPLE, CONCRETE words that a 5-year-old understands. "
+    "3. NEVER use vague terms like 'align', 'adjust', 'position', 'straighten' - be SPECIFIC. "
+    "4. Tell the child EXACTLY what to do with their body parts using simple action words. "
+    "5. Use visual/spatial language: 'move your knees closer together', 'bend your knees more', 'keep your heels on the floor'. "
+    "6. Be SPECIFIC about which body part and what direction: 'bend your knees more', 'lower your body down', 'stand up straighter'. "
+    "7. Use only the metrics and reasons provided. Do not make diagnoses or medical claims. "
+    "8. Return a STRICT JSON object that matches the provided JSON Schema exactly. "
+    "9. Limit to at most 3 concrete cues. Each cue ACTION must be a simple, specific instruction. "
+    ""
+    "GOOD EXAMPLES (specific, child-friendly): "
+    "- 'Bend your knees more' (not 'align knees') "
+    "- 'Keep your heels on the floor' (not 'adjust foot position') "
+    "- 'Stand up straighter' (not 'improve posture') "
+    "- 'Lower your body down more' (not 'increase depth') "
+    "- 'Keep your back straight' (not 'maintain alignment') "
+    ""
+    "IMPORTANT: If the person is facing sideways (is_facing_sideways=true in metrics), "
+    "NEVER suggest 'move knees closer together' or 'bring knees together' - this doesn't make sense when facing sideways. "
+    "When facing sideways, knees should be apart. Only check knee alignment when facing forward."
+    ""
+    "BAD EXAMPLES (vague, not child-friendly): "
+    "- 'Align knees' (too vague - what does align mean?) "
+    "- 'Adjust position' (what position? how?) "
+    "- 'Improve form' (what form? how?) "
+    "- 'Correct alignment' (what alignment? how?) "
+    ""
+    "For each cue, the ACTION field must be a simple, specific instruction that tells the child exactly what to do with their body."
 )
 
 LLM_USER_TEMPLATE = (
-    "Pose: {pose}" \
-    "Score: {score} (pass: {passed})" \
-    "Reasons: {reasons}" \
-    "Metrics: {metrics}" \
-    "Thresholds: {thresholds}" \
-    "User profile: tone={tone}, reading_level={reading_level}, language={language}." \
+    "Pose: {pose}\n"
+    "Score: {score} (pass: {passed})\n"
+    "Reasons: {reasons}\n"
+    "Metrics: {metrics}\n"
+    "Thresholds: {thresholds}\n"
+    "\n"
+    "IMPORTANT: Generate feedback for a child age 5-9. "
+    "Each cue ACTION must be:\n"
+    "- A simple, specific instruction (4-6 words max)\n"
+    "- Use concrete action words (bend, move, keep, lower, raise, stand, etc.)\n"
+    "- Specify which body part and what to do (e.g., 'Bend your knees more', not 'Align knees')\n"
+    "- Avoid vague words like 'align', 'adjust', 'position', 'straighten' - be very specific\n"
+    "- Make it something a 5-year-old can understand and do immediately\n"
+    "\n"
+    "User profile: tone={tone}, reading_level={reading_level}, language={language}.\n"
     "Output JSON only matching this schema: {schema}"
 )
 
@@ -523,8 +562,8 @@ def get_llm_feedback(result: PoseResult, tone: str = "coach", reading_level: str
         response = client.chat.completions.create(
             model="gpt-4o",  # gpt-4o supports JSON mode
             messages=messages,
-            temperature=0.5,  # Lower temperature for more consistent, concise responses
-            max_tokens=150,  # Reduced to encourage brevity (3-5 words per message)
+            temperature=0.7,  # Slightly higher for more creative, child-friendly language
+            max_tokens=200,  # Increased to allow for slightly longer but clearer instructions
             response_format={"type": "json_object"}  # Ensures JSON output
         )
         

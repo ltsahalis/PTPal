@@ -69,6 +69,21 @@ def init_database():
         )
     ''')
     
+    # Create parent summaries table to cache generated summaries
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS parent_summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL UNIQUE,
+            overall_assessment TEXT,
+            strengths TEXT NOT NULL,
+            improvements_needed TEXT NOT NULL,
+            technical_notes TEXT,
+            recommendations TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # No feedback table needed - just storing angles for external analysis
     
     conn.commit()
@@ -260,10 +275,26 @@ def compute_pose_metrics(pose_type, landmarks):
         metrics['knee_flexion_right_deg'] = knee_right_angle
         
         # Hip-knee-ankle alignment (frontal plane - knee valgus/varus)
-        # Measure horizontal deviation of knee from hip-ankle line
-        left_knee_x_deviation = abs(landmarks[LEFT_KNEE]['x'] - landmarks[LEFT_HIP]['x']) * 100
-        right_knee_x_deviation = abs(landmarks[RIGHT_KNEE]['x'] - landmarks[RIGHT_HIP]['x']) * 100
-        metrics['hip_knee_ankle_alignment_deg'] = (left_knee_x_deviation + right_knee_x_deviation) / 2
+        # Detect if person is facing sideways (shoulders aligned horizontally) vs forward
+        # If facing sideways, knee alignment check doesn't apply (knees should be apart)
+        shoulder_x_diff = abs(landmarks[LEFT_SHOULDER]['x'] - landmarks[RIGHT_SHOULDER]['x'])
+        shoulder_y_diff = abs(landmarks[LEFT_SHOULDER]['y'] - landmarks[RIGHT_SHOULDER]['y'])
+        is_facing_sideways = shoulder_x_diff < shoulder_y_diff * 0.5  # If shoulders are more vertical than horizontal
+        
+        if is_facing_sideways:
+            # When facing sideways, set alignment to 0 (no check) since knees should be apart
+            metrics['hip_knee_ankle_alignment_deg'] = 0.0
+            metrics['is_facing_sideways'] = True
+        else:
+            # When facing forward, measure frontal plane valgus/varus properly
+            # Calculate angle between hip-knee-ankle line (should be close to 180° when aligned)
+            # For now, use a simplified measure: knee deviation from hip-ankle midpoint
+            left_hip_ankle_mid_x = (landmarks[LEFT_HIP]['x'] + landmarks[LEFT_ANKLE]['x']) / 2
+            right_hip_ankle_mid_x = (landmarks[RIGHT_HIP]['x'] + landmarks[RIGHT_ANKLE]['x']) / 2
+            left_knee_deviation = abs(landmarks[LEFT_KNEE]['x'] - left_hip_ankle_mid_x) * 100
+            right_knee_deviation = abs(landmarks[RIGHT_KNEE]['x'] - right_hip_ankle_mid_x) * 100
+            metrics['hip_knee_ankle_alignment_deg'] = (left_knee_deviation + right_knee_deviation) / 2
+            metrics['is_facing_sideways'] = False
         
         # Heel height (vertical distance from toe to heel)
         left_heel_height = abs(landmarks[LEFT_HEEL]['y'] - landmarks[LEFT_TOE]['y']) * 170  # Approx cm
@@ -784,9 +815,9 @@ def get_parent_summary(session_id):
         ''', (session_id,))
         
         rows = cursor.fetchall()
-        conn.close()
         
         if not rows:
+            conn.close()
             return jsonify({
                 "status": "error",
                 "message": "No session data found"
@@ -825,6 +856,36 @@ def get_parent_summary(session_id):
         
         # Get pose type from first row
         pose_type = rows[0][1] if rows else "exercise"
+        
+        # Check if parent summary already exists in database
+        cursor_check = conn.cursor()
+        cursor_check.execute('''
+            SELECT overall_assessment, strengths, improvements_needed, technical_notes, recommendations
+            FROM parent_summaries
+            WHERE session_id = ?
+        ''', (session_id,))
+        
+        cached_summary = cursor_check.fetchone()
+        
+        if cached_summary:
+            # Return cached summary
+            overall_assessment, strengths_json, improvements_json, technical_notes, recommendations_json = cached_summary
+            conn.close()
+            
+            return jsonify({
+                "status": "success",
+                "session_id": session_id,
+                "parent_summary": {
+                    "overall_assessment": overall_assessment,
+                    "strengths": json.loads(strengths_json) if strengths_json else [],
+                    "improvements_needed": json.loads(improvements_json) if improvements_json else [],
+                    "technical_notes": technical_notes,
+                    "recommendations": json.loads(recommendations_json) if recommendations_json else []
+                },
+                "cached": True
+            })
+        
+        # No cached summary found, generate new one (keep connection open for saving later)
         
         # Generate parent summary using OpenAI
         parent_summary = None
@@ -900,10 +961,34 @@ Generate a comprehensive parent summary with technical details and specific reco
                 "message": "Failed to generate parent summary"
             }), 500
         
+        # Save parent summary to database for future use
+        try:
+            cursor_save = conn.cursor()
+            cursor_save.execute('''
+                INSERT OR REPLACE INTO parent_summaries 
+                (session_id, overall_assessment, strengths, improvements_needed, technical_notes, recommendations, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (
+                session_id,
+                parent_summary.get('overall_assessment', ''),
+                json.dumps(parent_summary.get('strengths', [])),
+                json.dumps(parent_summary.get('improvements_needed', [])),
+                parent_summary.get('technical_notes', ''),
+                json.dumps(parent_summary.get('recommendations', []))
+            ))
+            conn.commit()
+            print(f"Saved parent summary for session {session_id} to database")
+        except Exception as e:
+            print(f"Error saving parent summary to database: {e}")
+            # Continue even if save fails - still return the summary
+        
+        conn.close()
+        
         return jsonify({
             "status": "success",
             "session_id": session_id,
-            "parent_summary": parent_summary
+            "parent_summary": parent_summary,
+            "cached": False
         })
         
     except Exception as e:
@@ -976,6 +1061,142 @@ def new_session_notification():
             return jsonify({"status": "error", "message": "No session ID provided"}), 400
             
     except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/recent-activity', methods=['GET'])
+def get_recent_activity():
+    """Get recent activity/sessions for the home screen"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Get distinct sessions with their summaries
+        cursor.execute('''
+            SELECT 
+                session_id,
+                COUNT(DISTINCT pose_type) as exercise_count,
+                GROUP_CONCAT(DISTINCT pose_type) as exercises,
+                AVG(score) as avg_score,
+                SUM(CASE WHEN pass_fail = 1 THEN 1 ELSE 0 END) as pass_count,
+                COUNT(*) as total_samples,
+                MIN(timestamp) as start_time,
+                MAX(timestamp) as end_time,
+                MAX(created_at) as last_updated
+            FROM feedback_results
+            GROUP BY session_id
+            ORDER BY MAX(created_at) DESC
+            LIMIT 10
+        ''')
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        activities = []
+        for row in rows:
+            session_id, exercise_count, exercises_str, avg_score, pass_count, total_samples, start_time, end_time, last_updated = row
+            
+            # Parse exercises (comma-separated)
+            exercises = exercises_str.split(',') if exercises_str else []
+            
+            # Format exercise names (convert snake_case to Title Case)
+            formatted_exercises = []
+            for ex in exercises:
+                formatted = ex.replace('_', ' ').title()
+                # Special formatting for common exercises
+                formatted = formatted.replace('Partial Squat', 'Partial Squat')
+                formatted = formatted.replace('Heel Raises', 'Heel Raises')
+                formatted = formatted.replace('Single Leg Stance', 'Single Leg Stance')
+                formatted = formatted.replace('Tandem Stance', 'Tandem Stance')
+                formatted = formatted.replace('Functional Reach', 'Functional Reach')
+                formatted = formatted.replace('Tree Pose', 'Tree Pose')
+                formatted_exercises.append(formatted)
+            
+            # Calculate total score (average score * 5 exercises max, or use actual count)
+            total_score = round(avg_score * exercise_count) if avg_score else 0
+            
+            # Format date
+            from datetime import datetime
+            try:
+                if last_updated:
+                    # Handle different datetime formats
+                    if isinstance(last_updated, str):
+                        # Try parsing ISO format
+                        try:
+                            last_date = datetime.fromisoformat(last_updated.replace('Z', '+00:00'))
+                        except:
+                            # Try SQLite datetime format
+                            try:
+                                last_date = datetime.strptime(last_updated, '%Y-%m-%d %H:%M:%S')
+                            except:
+                                # Try with microseconds
+                                try:
+                                    last_date = datetime.strptime(last_updated, '%Y-%m-%d %H:%M:%S.%f')
+                                except:
+                                    date_str = 'Recently'
+                                    last_date = None
+                    else:
+                        last_date = None
+                    
+                    if last_date:
+                        now = datetime.now()
+                        # Handle timezone-aware datetime
+                        if last_date.tzinfo:
+                            from datetime import timezone
+                            now = now.replace(tzinfo=timezone.utc)
+                        
+                        diff = now - last_date
+                        days = diff.days
+                        
+                        if days == 0:
+                            hours = diff.seconds // 3600
+                            if hours == 0:
+                                minutes = diff.seconds // 60
+                                if minutes == 0:
+                                    date_str = 'Just now'
+                                else:
+                                    date_str = f'{minutes} minute{"s" if minutes != 1 else ""} ago'
+                            else:
+                                date_str = f'{hours} hour{"s" if hours != 1 else ""} ago'
+                        elif days == 1:
+                            date_str = '1 day ago'
+                        elif days < 7:
+                            date_str = f'{days} days ago'
+                        elif days < 14:
+                            date_str = '1 week ago'
+                        elif days < 30:
+                            date_str = f'{days // 7} weeks ago'
+                        else:
+                            date_str = f'{days // 30} month{"s" if days // 30 != 1 else ""} ago'
+                    else:
+                        date_str = 'Recently'
+                else:
+                    date_str = 'Recently'
+            except Exception as e:
+                print(f"Error formatting date: {e}")
+                date_str = 'Recently'
+            
+            activities.append({
+                'session_id': session_id,
+                'session_number': len(activities) + 1,  # Will be recalculated on frontend
+                'exercises': formatted_exercises,
+                'exercise_count': exercise_count,
+                'total_score': total_score,
+                'average_score': round(avg_score, 1) if avg_score else 0,
+                'date': date_str,
+                'pass_count': pass_count,
+                'total_samples': total_samples
+            })
+        
+        return jsonify({
+            "status": "success",
+            "activities": activities,
+            "total_sessions": len(activities)
+        })
+        
+    except Exception as e:
+        print(f"Error getting recent activity: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
