@@ -2255,14 +2255,14 @@ class GuidedSessionModal {
             tree_pose: 'Hold a steady tree pose for 30 seconds.'
         };
         
-        // Exercise to video file mapping (#TODO using single_leg.mp4 for all poses for now)
+        // Exercise to video file mapping
         this.exerciseVideos = {
-            partial_squat: '/avatar_poses/single_leg.mp4',
-            heel_raises: '/avatar_poses/single_leg.mp4',
-            single_leg_stance: '/avatar_poses/single_leg.mp4',
-            tandem_stance: '/avatar_poses/single_leg.mp4',
-            functional_reach: '/avatar_poses/single_leg.mp4',
-            tree_pose: '/avatar_poses/single_leg.mp4'
+            partial_squat: '/avatar_poses/leg_lift.mp4',
+            heel_raises: '/avatar_poses/leg_lift.mp4',
+            single_leg_stance: '/avatar_poses/leg_lift.mp4',
+            tandem_stance: '/avatar_poses/tandem.mp4',
+            functional_reach: '/avatar_poses/leg_lift.mp4',
+            tree_pose: '/avatar_poses/tree.mp4'
         };
         
         // Detailed pose descriptions for the popup

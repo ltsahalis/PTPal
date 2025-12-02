@@ -2298,7 +2298,6 @@ footer {
     right: 24px;
     width: 200px;
     max-width: 30%;
-    aspect-ratio: 16 / 9;
     border-radius: 16px;
     overflow: hidden;
     background: rgba(0, 0, 0, 0.7);
@@ -2314,8 +2313,8 @@ footer {
 
 .avatar-overlay video {
     width: 100%;
-    height: 100%;
-    object-fit: cover;
+    height: auto;
+    display: block;
 }
 
 /* Responsive adjustments for avatar overlay */
