@@ -1070,8 +1070,32 @@ def get_recent_activity():
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
-        # Get distinct sessions with their summaries
+        # Get distinct sessions with their summaries, ordered by most recent
+        # First get the max id for each session to determine recency
         cursor.execute('''
+            SELECT 
+                session_id,
+                MAX(id) as max_id
+            FROM feedback_results
+            GROUP BY session_id
+            ORDER BY max_id DESC
+            LIMIT 10
+        ''')
+        
+        recent_sessions = cursor.fetchall()
+        session_ids = [row[0] for row in recent_sessions] if recent_sessions else []
+        
+        if not session_ids:
+            conn.close()
+            return jsonify({
+                "status": "success",
+                "activities": [],
+                "total_sessions": 0
+            })
+        
+        # Now get detailed info for these sessions
+        placeholders = ','.join(['?'] * len(session_ids))
+        cursor.execute(f'''
             SELECT 
                 session_id,
                 COUNT(DISTINCT pose_type) as exercise_count,
@@ -1081,18 +1105,24 @@ def get_recent_activity():
                 COUNT(*) as total_samples,
                 MIN(timestamp) as start_time,
                 MAX(timestamp) as end_time,
-                MAX(created_at) as last_updated
+                MAX(COALESCE(created_at, timestamp)) as last_updated
             FROM feedback_results
+            WHERE session_id IN ({placeholders})
             GROUP BY session_id
-            ORDER BY MAX(created_at) DESC
-            LIMIT 10
-        ''')
+        ''', session_ids)
         
         rows = cursor.fetchall()
         conn.close()
         
+        # Create a dict to maintain order from session_ids list
+        session_data = {row[0]: row for row in rows}
+        
         activities = []
-        for row in rows:
+        # Process sessions in the order they were retrieved (most recent first)
+        for session_id in session_ids:
+            if session_id not in session_data:
+                continue
+            row = session_data[session_id]
             session_id, exercise_count, exercises_str, avg_score, pass_count, total_samples, start_time, end_time, last_updated = row
             
             # Parse exercises (comma-separated)
@@ -1114,65 +1144,89 @@ def get_recent_activity():
             # Calculate total score (average score * 5 exercises max, or use actual count)
             total_score = round(avg_score * exercise_count) if avg_score else 0
             
-            # Format date
+            # Format date - use last_updated (created_at) as it's when the record was written to DB
             from datetime import datetime
             try:
-                if last_updated:
+                # Prefer last_updated (created_at) as it's when the record was actually saved
+                # Fall back to end_time (last timestamp) if created_at is not available
+                time_to_use = last_updated if last_updated else end_time
+                
+                if time_to_use:
+                    last_date = None
                     # Handle different datetime formats
-                    if isinstance(last_updated, str):
-                        # Try parsing ISO format
+                    if isinstance(time_to_use, str):
+                        # Try parsing ISO format first (from Python datetime.now().isoformat())
                         try:
-                            last_date = datetime.fromisoformat(last_updated.replace('Z', '+00:00'))
+                            # datetime.fromisoformat() handles most ISO formats including with/without timezone
+                            last_date = datetime.fromisoformat(time_to_use.replace('Z', '+00:00'))
                         except:
-                            # Try SQLite datetime format
+                            # Try SQLite datetime format (e.g., 2024-01-15 10:30:45)
                             try:
-                                last_date = datetime.strptime(last_updated, '%Y-%m-%d %H:%M:%S')
+                                last_date = datetime.strptime(time_to_use, '%Y-%m-%d %H:%M:%S')
                             except:
                                 # Try with microseconds
                                 try:
-                                    last_date = datetime.strptime(last_updated, '%Y-%m-%d %H:%M:%S.%f')
+                                    last_date = datetime.strptime(time_to_use, '%Y-%m-%d %H:%M:%S.%f')
                                 except:
-                                    date_str = 'Recently'
-                                    last_date = None
-                    else:
-                        last_date = None
+                                    # Try ISO format without timezone
+                                    try:
+                                        # Remove microseconds if present
+                                        clean_str = time_to_use.split('.')[0] if '.' in time_to_use else time_to_use
+                                        if 'T' in clean_str:
+                                            last_date = datetime.strptime(clean_str, '%Y-%m-%dT%H:%M:%S')
+                                        else:
+                                            last_date = None
+                                    except:
+                                        last_date = None
+                    elif isinstance(time_to_use, datetime):
+                        last_date = time_to_use
                     
                     if last_date:
-                        now = datetime.now()
-                        # Handle timezone-aware datetime
+                        # Remove timezone info if present for consistent comparison
                         if last_date.tzinfo:
                             from datetime import timezone
-                            now = now.replace(tzinfo=timezone.utc)
+                            # Convert to UTC then remove timezone info
+                            last_date = last_date.astimezone(timezone.utc).replace(tzinfo=None)
                         
+                        now = datetime.now()
                         diff = now - last_date
-                        days = diff.days
                         
-                        if days == 0:
-                            hours = diff.seconds // 3600
-                            if hours == 0:
-                                minutes = diff.seconds // 60
-                                if minutes == 0:
-                                    date_str = 'Just now'
-                                else:
-                                    date_str = f'{minutes} minute{"s" if minutes != 1 else ""} ago'
-                            else:
-                                date_str = f'{hours} hour{"s" if hours != 1 else ""} ago'
-                        elif days == 1:
-                            date_str = '1 day ago'
-                        elif days < 7:
-                            date_str = f'{days} days ago'
-                        elif days < 14:
-                            date_str = '1 week ago'
-                        elif days < 30:
-                            date_str = f'{days // 7} weeks ago'
+                        # Handle negative differences (future dates) - shouldn't happen but be safe
+                        if diff.total_seconds() < 0:
+                            date_str = 'Just now'
                         else:
-                            date_str = f'{days // 30} month{"s" if days // 30 != 1 else ""} ago'
+                            days = diff.days
+                            total_seconds = int(diff.total_seconds())
+                            
+                            if days == 0:
+                                hours = total_seconds // 3600
+                                if hours == 0:
+                                    minutes = total_seconds // 60
+                                    if minutes == 0:
+                                        date_str = 'Just now'
+                                    else:
+                                        date_str = f'{minutes} minute{"s" if minutes != 1 else ""} ago'
+                                else:
+                                    date_str = f'{hours} hour{"s" if hours != 1 else ""} ago'
+                            elif days == 1:
+                                date_str = '1 day ago'
+                            elif days < 7:
+                                date_str = f'{days} days ago'
+                            elif days < 14:
+                                date_str = '1 week ago'
+                            elif days < 30:
+                                date_str = f'{days // 7} week{"s" if days // 7 != 1 else ""} ago'
+                            else:
+                                months = days // 30
+                                date_str = f'{months} month{"s" if months != 1 else ""} ago'
                     else:
                         date_str = 'Recently'
                 else:
                     date_str = 'Recently'
             except Exception as e:
                 print(f"Error formatting date: {e}")
+                import traceback
+                traceback.print_exc()
                 date_str = 'Recently'
             
             activities.append({

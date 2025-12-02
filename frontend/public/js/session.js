@@ -2631,7 +2631,7 @@ class GuidedSessionModal {
         if (this.avatarOverlay) {
             this.avatarOverlay.classList.add('hidden');
         }
-        this.toggleConfig(true);
+        this.toggleConfig(false);
         this.toggleLivePanel(true);
         this.hideFloatingPanel();
         this.showOverlay();

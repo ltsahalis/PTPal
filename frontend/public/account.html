@@ -468,6 +468,20 @@
         // Load recent activity on page load
         loadRecentActivity();
 
+        // Reload activity when page becomes visible (user returns from session)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                loadRecentActivity();
+                loadProgressStats();
+            }
+        });
+
+        // Also reload when window gets focus (alternative trigger)
+        window.addEventListener('focus', () => {
+            loadRecentActivity();
+            loadProgressStats();
+        });
+
         // Begin Session button - navigate to session page
         document.getElementById('begin-session-btn').addEventListener('click', () => {
             window.location.href = '/session';

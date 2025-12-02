@@ -148,9 +148,9 @@ def validate_partial_squat(metrics: Dict[str, float], th: Thresholds = Threshold
         checks = 4  # Skip knee alignment check when facing sideways
 
     fails += _bool_fail(metrics["knee_flexion_deg"] > th.squat_min_depth_deg,
-                        f"Go deeper: knee flexion {metrics['knee_flexion_deg']:.0f}° > {th.squat_min_depth_deg:.0f}°.", reasons)
+                        f"Bend knees more: knee flexion {metrics['knee_flexion_deg']:.0f}° > {th.squat_min_depth_deg:.0f}° (knees too straight).", reasons)
     fails += _bool_fail(metrics["knee_flexion_deg"] < th.squat_max_depth_deg,
-                        f"Don't go too deep: knee flexion {metrics['knee_flexion_deg']:.0f}° < {th.squat_max_depth_deg:.0f}°.", reasons)
+                        f"Bend knees less: knee flexion {metrics['knee_flexion_deg']:.0f}° < {th.squat_max_depth_deg:.0f}° (knees too bent).", reasons)
     # Only check knee alignment if facing forward (not sideways)
     # When facing sideways, knees should be apart, so this check doesn't apply
     if not is_facing_sideways:
@@ -484,11 +484,16 @@ LLM_SYSTEM_PROMPT = (
     "9. Limit to at most 3 concrete cues. Each cue ACTION must be a simple, specific instruction. "
     ""
     "GOOD EXAMPLES (specific, child-friendly): "
-    "- 'Bend your knees more' (not 'align knees') "
+    "- 'Bend your knees more' (when knees are too straight - angle > 140°) "
+    "- 'Bend your knees less' or 'Straighten knees a bit' (when knees are too bent - angle < 100°) "
     "- 'Keep your heels on the floor' (not 'adjust foot position') "
     "- 'Stand up straighter' (not 'improve posture') "
     "- 'Lower your body down more' (not 'increase depth') "
     "- 'Keep your back straight' (not 'maintain alignment') "
+    ""
+    "CRITICAL: When the reason says 'Bend knees less' or 'knees too bent', the action MUST be to bend LESS "
+    "(e.g., 'Bend your knees less', 'Straighten knees a bit', 'Stand up a little'), NOT 'bend knees more'. "
+    "When the reason says 'Bend knees more' or 'knees too straight', the action is to bend MORE."
     ""
     "IMPORTANT: If the person is facing sideways (is_facing_sideways=true in metrics), "
     "NEVER suggest 'move knees closer together' or 'bring knees together' - this doesn't make sense when facing sideways. "
@@ -517,6 +522,11 @@ LLM_USER_TEMPLATE = (
     "- Specify which body part and what to do (e.g., 'Bend your knees more', not 'Align knees')\n"
     "- Avoid vague words like 'align', 'adjust', 'position', 'straighten' - be very specific\n"
     "- Make it something a 5-year-old can understand and do immediately\n"
+    "\n"
+    "CRITICAL FOR KNEE BENDING: "
+    "- If reason says 'Bend knees more' or 'knees too straight' → action: 'Bend your knees more'\n"
+    "- If reason says 'Bend knees less' or 'knees too bent' → action: 'Bend your knees less' or 'Straighten knees a bit'\n"
+    "- NEVER say 'bend knees more' when the reason indicates knees are already too bent!\n"
     "\n"
     "User profile: tone={tone}, reading_level={reading_level}, language={language}.\n"
     "Output JSON only matching this schema: {schema}"
