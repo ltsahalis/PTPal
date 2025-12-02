@@ -1171,6 +1171,7 @@ class WebcamManager {
         this.sideCounts = { left: 0, right: 0, top: 0, bottom: 0 };
         this.isOutOfFrame = false;
         this.isPartiallyOut = false;
+        this.frameStatusMessage = null; // Store specific frame status message
         this.webcamContainer = document.querySelector('.webcam-container');
         this.stage = document.querySelector('.webcam-stage');
         this.resizeObserver = null;
@@ -1712,9 +1713,29 @@ waitForMediaPipe() {
     checkOutOfFrame(landmarks) {
         this.lostFrames = 0; // Reset lost frames since we have a pose
         
+        // First, check if head-to-waist landmarks are visible and in frame
+        const headToWaistStatus = this.checkHeadToWaistInFrame(landmarks);
+        if (!headToWaistStatus.isValid) {
+            // Head-to-waist not fully visible - show partially out
+            this.isPartiallyOut = true;
+            this.isOutOfFrame = false;
+            this.frameStatusMessage = headToWaistStatus.message; // Store specific message
+            this.updateFrameStatus();
+            return;
+        }
+        
+        // Clear frame status message if head-to-waist is valid
+        this.frameStatusMessage = null;
+        
         // Calculate bounding box from pose landmarks
         const bounds = this.calculatePoseBounds(landmarks);
-        if (!bounds) return;
+        if (!bounds) {
+            this.isPartiallyOut = true;
+            this.isOutOfFrame = false;
+            this.frameStatusMessage = 'PARTIALLY OUT OF FRAME - Lower camera or step back';
+            this.updateFrameStatus();
+            return;
+        }
         
         const { x, y, width, height, centerX, centerY } = bounds;
         const canvasWidth = this.canvas.width;
@@ -1761,6 +1782,11 @@ waitForMediaPipe() {
         const visibilityIssue = visibilityRatio < this.VIS_THRESH;
         this.isPartiallyOut = hasSideIssues || visibilityIssue;
         
+        // Clear frame status message if all checks pass
+        if (!this.isPartiallyOut) {
+            this.frameStatusMessage = null;
+        }
+        
         if (this.ENABLE_FRAME_DEBUG && visibilityIssue) {
             console.log('Partially out due to low visibility ratio');
         }
@@ -1776,6 +1802,104 @@ waitForMediaPipe() {
         
         this.isOutOfFrame = false;
         this.updateFrameStatus();
+    }
+    
+    // Check if head-to-waist landmarks are visible and within frame
+    checkHeadToWaistInFrame(landmarks) {
+        if (!landmarks || landmarks.length < 33) {
+            return { 
+                isValid: false, 
+                reason: 'Not enough landmarks',
+                message: 'PARTIALLY OUT OF FRAME - Please center yourself'
+            };
+        }
+        
+        // BlazePose landmark indices for head-to-waist
+        const REQUIRED_LANDMARKS = {
+            nose: 0,
+            leftShoulder: 11,
+            rightShoulder: 12,
+            leftHip: 23,
+            rightHip: 24
+        };
+        
+        const MIN_VISIBILITY = 0.5; // Minimum visibility threshold
+        const canvasWidth = this.canvas.width;
+        const canvasHeight = this.canvas.height;
+        
+        // Track which landmarks are missing
+        const missingUpperBody = []; // nose, shoulders
+        const missingLowerBody = []; // hips
+        const outOfBoundsUpperBody = [];
+        const outOfBoundsLowerBody = [];
+        
+        // Check each required landmark
+        for (const [name, index] of Object.entries(REQUIRED_LANDMARKS)) {
+            const landmark = landmarks[index];
+            const isUpperBody = name === 'nose' || name === 'leftShoulder' || name === 'rightShoulder';
+            
+            // Check if landmark exists and is visible
+            if (!landmark || landmark.visibility < MIN_VISIBILITY) {
+                if (this.ENABLE_FRAME_DEBUG) {
+                    console.log(`Head-to-waist check failed: ${name} not visible (visibility: ${landmark?.visibility || 0})`);
+                }
+                if (isUpperBody) {
+                    missingUpperBody.push(name);
+                } else {
+                    missingLowerBody.push(name);
+                }
+                continue;
+            }
+            
+            // Convert normalized coordinates to pixel coordinates
+            const x = landmark.x * canvasWidth;
+            const y = landmark.y * canvasHeight;
+            
+            // Check if landmark is within safe frame boundaries
+            const isOutOfBounds = x < this.SAFE_MARGIN || x > canvasWidth - this.SAFE_MARGIN ||
+                y < this.SAFE_MARGIN || y > canvasHeight - this.SAFE_MARGIN;
+            
+            if (isOutOfBounds) {
+                if (this.ENABLE_FRAME_DEBUG) {
+                    console.log(`Head-to-waist check failed: ${name} out of bounds (x: ${x.toFixed(1)}, y: ${y.toFixed(1)})`);
+                }
+                // Check if it's out of bounds at the bottom (likely need to lower camera)
+                if (y > canvasHeight - this.SAFE_MARGIN) {
+                    if (isUpperBody) {
+                        outOfBoundsUpperBody.push(name);
+                    } else {
+                        outOfBoundsLowerBody.push(name);
+                    }
+                } else {
+                    // Out of bounds on other sides
+                    if (isUpperBody) {
+                        outOfBoundsUpperBody.push(name);
+                    } else {
+                        outOfBoundsLowerBody.push(name);
+                    }
+                }
+            }
+        }
+        
+        // Determine the appropriate message based on what's missing
+        if (missingLowerBody.length > 0 || outOfBoundsLowerBody.length > 0) {
+            // Hips are missing or out of bounds - need to lower camera or step back
+            return { 
+                isValid: false, 
+                reason: 'Hips not visible or out of bounds',
+                message: 'PARTIALLY OUT OF FRAME - Lower camera or step back'
+            };
+        } else if (missingUpperBody.length > 0 || outOfBoundsUpperBody.length > 0) {
+            // Head/shoulders are missing or out of bounds
+            return { 
+                isValid: false, 
+                reason: 'Head/shoulders not visible or out of bounds',
+                message: 'PARTIALLY OUT OF FRAME - Move back or adjust camera'
+            };
+        }
+        
+        // All required landmarks are visible and within frame
+        return { isValid: true };
     }
     
     calculatePoseBounds(landmarks) {
@@ -1864,7 +1988,9 @@ waitForMediaPipe() {
             this.updateStatus('OUT OF FRAME - Please move back into view', 'error');
         } else if (this.isPartiallyOut) {
             this.webcamContainer.classList.add('partially-out');
-            this.updateStatus('PARTIALLY OUT OF FRAME - Please center yourself', 'warning');
+            // Use specific message if available, otherwise use default
+            const message = this.frameStatusMessage || 'PARTIALLY OUT OF FRAME - Please center yourself';
+            this.updateStatus(message, 'warning');
         } else {
             this.webcamContainer.classList.add('in-frame');
             this.updateStatus('IN FRAME - Good position!', 'success');
