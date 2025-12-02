@@ -767,6 +767,21 @@ body.session-blocked #session-floating-panel {
     font-weight: 600;
 }
 
+.summary-stars {
+    text-align: center;
+    font-size: 2rem;
+    color: #FFD700;
+    margin-bottom: 20px;
+    padding: 15px 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    letter-spacing: 4px;
+}
+
+.summary-stars .empty-star {
+    color: rgba(255, 215, 0, 0.3);
+}
+
 .session-summary {
     margin-top: 20px;
     display: flex;

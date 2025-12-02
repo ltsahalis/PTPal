@@ -114,101 +114,359 @@
         // Check if this is the special demo user (case-insensitive email)
         const isDemoUser = user.email && user.email.toLowerCase() === 'janedoe@gmail.com' && user.password === 'helloworld';
         
-        // Set progress data based on user
-        let progress;
-        if (isDemoUser) {
-            // Special stats for demo user
-            progress = {
-                totalStars: 12,
-                level: 7,
-                dayStreak: 7,
-                exercisesCompleted: 30
-            };
-        } else {
-            // Default stats for all other users
-            progress = {
-                totalStars: 0,
-                level: 1,
-                dayStreak: 0,
-                exercisesCompleted: 0
-            };
+        // Fetch and update progress stats from backend
+        async function loadProgressStats() {
+            try {
+                const apiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                    ? `https://${window.location.hostname}:8001`
+                    : '';
+                
+                const response = await fetch(`${apiBaseUrl}/api/recent-activity`);
+                const data = await response.json();
+                
+                let totalStars = 0;
+                let exercisesCompleted = 0;
+                let uniqueSessions = new Set();
+                
+                if (data.status === 'success' && data.activities) {
+                    data.activities.forEach(activity => {
+                        uniqueSessions.add(activity.session_id);
+                        exercisesCompleted += activity.exercise_count || 0;
+                        // Total stars = sum of average scores (rounded) for all exercises
+                        totalStars += Math.round(activity.average_score * activity.exercise_count) || 0;
+                    });
+                }
+                
+                // Calculate level based on total stars (every 50 stars = 1 level, starting at level 1)
+                const level = Math.max(1, Math.floor(totalStars / 50) + 1);
+                
+                // Calculate day streak (simplified - count unique days with sessions)
+                // For now, use number of sessions as a proxy
+                const dayStreak = uniqueSessions.size;
+                
+                // For demo user, add some bonus stats if real data is sparse
+                let progress;
+                if (isDemoUser && exercisesCompleted < 5) {
+                    progress = {
+                        totalStars: Math.max(totalStars, 12),
+                        level: Math.max(level, 7),
+                        dayStreak: Math.max(dayStreak, 7),
+                        exercisesCompleted: Math.max(exercisesCompleted, 30)
+                    };
+                } else {
+                    progress = {
+                        totalStars: totalStars,
+                        level: level,
+                        dayStreak: dayStreak,
+                        exercisesCompleted: exercisesCompleted
+                    };
+                }
+                
+                // Display the progress
+                document.getElementById('total-stars').textContent = progress.totalStars;
+                document.getElementById('current-level').textContent = 'Level ' + progress.level;
+                document.getElementById('day-streak').textContent = progress.dayStreak + ' Day' + (progress.dayStreak !== 1 ? 's' : '');
+                document.getElementById('exercises-completed').textContent = progress.exercisesCompleted;
+                
+                // Update progress bar (based on level progress)
+                const levelProgress = (totalStars % 50) / 50 * 100;
+                document.getElementById('overall-progress-fill').style.width = levelProgress + '%';
+                document.getElementById('progress-percentage').textContent = Math.round(levelProgress) + '%';
+                
+            } catch (error) {
+                console.error('Error loading progress stats:', error);
+                // Fallback to default or demo stats
+                let progress;
+                if (isDemoUser) {
+                    progress = {
+                        totalStars: 12,
+                        level: 7,
+                        dayStreak: 7,
+                        exercisesCompleted: 30
+                    };
+                } else {
+                    progress = {
+                        totalStars: 0,
+                        level: 1,
+                        dayStreak: 0,
+                        exercisesCompleted: 0
+                    };
+                }
+                
+                document.getElementById('total-stars').textContent = progress.totalStars;
+                document.getElementById('current-level').textContent = 'Level ' + progress.level;
+                document.getElementById('day-streak').textContent = progress.dayStreak + ' Day' + (progress.dayStreak !== 1 ? 's' : '');
+                document.getElementById('exercises-completed').textContent = progress.exercisesCompleted;
+                document.getElementById('overall-progress-fill').style.width = (isDemoUser ? 50 : 0) + '%';
+                document.getElementById('progress-percentage').textContent = (isDemoUser ? 50 : 0) + '%';
+            }
         }
         
-        // Display the progress
-        document.getElementById('total-stars').textContent = progress.totalStars;
-        document.getElementById('current-level').textContent = 'Level ' + progress.level;
-        document.getElementById('day-streak').textContent = progress.dayStreak + ' Days';
-        document.getElementById('exercises-completed').textContent = progress.exercisesCompleted;
+        // Load progress stats on page load
+        loadProgressStats();
 
         // Set overall progress bar
         const overallProgress = isDemoUser ? 50 : 0;
         document.getElementById('overall-progress-fill').style.width = overallProgress + '%';
         document.getElementById('progress-percentage').textContent = overallProgress + '%';
 
-        // Add activity logs for Jane Doe
-        if (isDemoUser) {
+        // Fetch and display recent activity from backend
+        async function loadRecentActivity() {
             const activityList = document.getElementById('activity-list');
-            activityList.innerHTML = ''; // Clear the welcome message
             
-            const activities = [
-                {
-                    sessionNumber: 7,
-                    exercises: ['Partial Squat', 'Tree Pose', 'Heel Raises', 'Single Leg Stance', 'Tandem Stance'],
-                    totalScore: 450,
-                    date: '2 days ago'
-                },
-                {
-                    sessionNumber: 6,
-                    exercises: ['Functional Reach', 'Partial Squat', 'Tree Pose', 'Heel Raises', 'Single Leg Stance'],
-                    totalScore: 442,
-                    date: '3 days ago'
-                },
-                {
-                    sessionNumber: 5,
-                    exercises: ['Tandem Stance', 'Functional Reach', 'Partial Squat', 'Tree Pose', 'Heel Raises'],
-                    totalScore: 435,
-                    date: '4 days ago'
-                },
-                {
-                    sessionNumber: 4,
-                    exercises: ['Single Leg Stance', 'Tandem Stance', 'Functional Reach', 'Partial Squat', 'Tree Pose'],
-                    totalScore: 428,
-                    date: '5 days ago'
-                },
-                {
-                    sessionNumber: 3,
-                    exercises: ['Heel Raises', 'Single Leg Stance', 'Tandem Stance', 'Functional Reach', 'Partial Squat'],
-                    totalScore: 420,
-                    date: '6 days ago'
-                },
-                {
-                    sessionNumber: 2,
-                    exercises: ['Tree Pose', 'Heel Raises', 'Single Leg Stance', 'Tandem Stance', 'Functional Reach'],
-                    totalScore: 415,
-                    date: '1 week ago'
-                },
-                {
-                    sessionNumber: 1,
-                    exercises: ['Partial Squat', 'Tree Pose', 'Heel Raises', 'Single Leg Stance', 'Tandem Stance'],
-                    totalScore: 410,
-                    date: '1 week ago'
+            try {
+                // Determine API base URL
+                const apiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                    ? `https://${window.location.hostname}:8001`
+                    : '';
+                
+                const response = await fetch(`${apiBaseUrl}/api/recent-activity`);
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.activities && data.activities.length > 0) {
+                    activityList.innerHTML = ''; // Clear the welcome message
+                    
+                    // For demo user, also show demo data if available
+                    if (isDemoUser && data.activities.length < 3) {
+                        // Add some demo activities if real data is sparse
+                        const demoActivities = [
+                            {
+                                session_id: 'demo_session_7',
+                                sessionNumber: 7,
+                                exercises: ['Partial Squat', 'Tree Pose', 'Heel Raises', 'Single Leg Stance', 'Tandem Stance'],
+                                totalScore: 450,
+                                date: '2 days ago',
+                                exercise_count: 5
+                            },
+                            {
+                                session_id: 'demo_session_6',
+                                sessionNumber: 6,
+                                exercises: ['Functional Reach', 'Partial Squat', 'Tree Pose', 'Heel Raises', 'Single Leg Stance'],
+                                totalScore: 442,
+                                date: '3 days ago',
+                                exercise_count: 5
+                            }
+                        ];
+                        
+                        // Combine real and demo data
+                        const allActivities = [...data.activities, ...demoActivities.slice(0, 7 - data.activities.length)];
+                        displayActivities(allActivities, activityList);
+                    } else {
+                        displayActivities(data.activities, activityList);
+                    }
+                } else {
+                    // No real data - show welcome message or demo data for demo user
+                    if (isDemoUser) {
+                        activityList.innerHTML = '';
+                        const demoActivities = [
+                            {
+                                sessionNumber: 7,
+                                exercises: ['Partial Squat', 'Tree Pose', 'Heel Raises', 'Single Leg Stance', 'Tandem Stance'],
+                                totalScore: 450,
+                                date: '2 days ago'
+                            },
+                            {
+                                sessionNumber: 6,
+                                exercises: ['Functional Reach', 'Partial Squat', 'Tree Pose', 'Heel Raises', 'Single Leg Stance'],
+                                totalScore: 442,
+                                date: '3 days ago'
+                            },
+                            {
+                                sessionNumber: 5,
+                                exercises: ['Tandem Stance', 'Functional Reach', 'Partial Squat', 'Tree Pose', 'Heel Raises'],
+                                totalScore: 435,
+                                date: '4 days ago'
+                            }
+                        ];
+                        displayActivities(demoActivities, activityList);
+                    }
+                    // For other users, keep the welcome message
                 }
-            ];
-            
-            activities.forEach(activity => {
+            } catch (error) {
+                console.error('Error loading recent activity:', error);
+                // On error, show demo data for demo user, otherwise keep welcome message
+                if (isDemoUser) {
+                    activityList.innerHTML = '';
+                    const demoActivities = [
+                        {
+                            session_id: 'demo_session_1',
+                            sessionNumber: 1,
+                            exercises: ['Partial Squat', 'Tree Pose', 'Heel Raises'],
+                            totalScore: 410,
+                            date: 'Recently',
+                            exercise_count: 3
+                        }
+                    ];
+                    displayActivities(demoActivities, activityList);
+                }
+            }
+        }
+        
+        function displayActivities(activities, activityList) {
+            activities.forEach((activity, index) => {
                 const activityItem = document.createElement('div');
                 activityItem.className = 'activity-item';
                 const exercisesList = activity.exercises.join(', ');
+                const sessionNumber = activity.sessionNumber || (activities.length - index);
+                const totalScore = activity.totalScore || (activity.average_score * activity.exercise_count) || 0;
+                const maxScore = (activity.exercise_count || activity.exercises.length) * 5; // Max 5 stars per exercise
+                const sessionId = activity.session_id || `session_${sessionNumber}`;
+                const exerciseCount = activity.exercise_count || activity.exercises.length;
+                
                 activityItem.innerHTML = `
                     <div class="activity-content">
-                        <h4>Session ${activity.sessionNumber}:</h4>
-                        <p>Completed 5 exercises: ${exercisesList}. Total Score: ${activity.totalScore}/500</p>
-                        <span class="activity-date">${activity.date}</span>
+                        <div class="activity-header">
+                            <div class="activity-info">
+                                <h4>Session ${sessionNumber}:</h4>
+                                <p>Completed ${exerciseCount} ${exerciseCount === 1 ? 'exercise' : 'exercises'}: ${exercisesList}. Total Score: ${Math.round(totalScore)}/${maxScore}</p>
+                                <span class="activity-date">${activity.date || 'Recently'}</span>
+                            </div>
+                            <div class="activity-actions">
+                                <button class="btn-view-summary" data-session-id="${sessionId}" onclick="viewParentSummary('${sessionId}', ${sessionNumber})">
+                                    View Parent Summary
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 `;
                 activityList.appendChild(activityItem);
             });
         }
+        
+        // Function to view parent summary
+        async function viewParentSummary(sessionId, sessionNumber) {
+            // Create or get modal
+            let modal = document.getElementById('parent-summary-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'parent-summary-modal';
+                modal.className = 'parent-summary-modal';
+                document.body.appendChild(modal);
+            }
+            
+            // Update modal content with current session number
+            modal.innerHTML = `
+                <div class="parent-summary-modal-content">
+                    <div class="parent-summary-modal-header">
+                        <h2>Parent Summary - Session ${sessionNumber}</h2>
+                        <button class="parent-summary-close" onclick="closeParentSummary()">&times;</button>
+                    </div>
+                    <div class="parent-summary-modal-body" id="parent-summary-modal-body">
+                        <div class="parent-summary-loading" id="parent-summary-loading">
+                            <p>Loading parent summary...</p>
+                        </div>
+                        <div class="parent-summary-content hidden" id="parent-summary-content"></div>
+                    </div>
+                </div>
+            `;
+            
+            // Show modal
+            modal.style.display = 'flex';
+            document.getElementById('parent-summary-loading').style.display = 'block';
+            document.getElementById('parent-summary-content').classList.add('hidden');
+            
+            try {
+                const apiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                    ? `https://${window.location.hostname}:8001`
+                    : '';
+                
+                const response = await fetch(`${apiBaseUrl}/api/parent-summary/${sessionId}`);
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.parent_summary) {
+                    const summary = data.parent_summary;
+                    const contentDiv = document.getElementById('parent-summary-content');
+                    
+                    let html = '';
+                    
+                    // Overall Assessment
+                    if (summary.overall_assessment) {
+                        html += `
+                            <div class="parent-summary-section">
+                                <h3 class="parent-summary-title">Overall Assessment</h3>
+                                <p class="parent-summary-text">${summary.overall_assessment}</p>
+                            </div>
+                        `;
+                    }
+                    
+                    // Strengths
+                    if (summary.strengths && summary.strengths.length > 0) {
+                        html += `
+                            <div class="parent-summary-section">
+                                <h3 class="parent-summary-title">Strengths</h3>
+                                <ul class="parent-summary-list">
+                                    ${summary.strengths.map(strength => `<li>${strength}</li>`).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    }
+                    
+                    // Areas for Improvement
+                    if (summary.improvements_needed && summary.improvements_needed.length > 0) {
+                        html += `
+                            <div class="parent-summary-section">
+                                <h3 class="parent-summary-title">Areas for Improvement</h3>
+                                <ul class="parent-summary-list">
+                                    ${summary.improvements_needed.map(improvement => `<li>${improvement}</li>`).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    }
+                    
+                    // Technical Notes
+                    if (summary.technical_notes) {
+                        html += `
+                            <div class="parent-summary-section">
+                                <h3 class="parent-summary-title">Technical Notes</h3>
+                                <p class="parent-summary-text">${summary.technical_notes}</p>
+                            </div>
+                        `;
+                    }
+                    
+                    // Recommendations
+                    if (summary.recommendations && summary.recommendations.length > 0) {
+                        html += `
+                            <div class="parent-summary-section">
+                                <h3 class="parent-summary-title">Recommendations</h3>
+                                <ul class="parent-summary-list">
+                                    ${summary.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    }
+                    
+                    contentDiv.innerHTML = html;
+                    document.getElementById('parent-summary-loading').style.display = 'none';
+                    contentDiv.classList.remove('hidden');
+                } else {
+                    throw new Error(data.message || 'Failed to load parent summary');
+                }
+            } catch (error) {
+                console.error('Error loading parent summary:', error);
+                document.getElementById('parent-summary-loading').innerHTML = `
+                    <p style="color: #E53E3E;">Error loading summary: ${error.message}</p>
+                `;
+            }
+        }
+        
+        // Function to close parent summary modal
+        function closeParentSummary() {
+            const modal = document.getElementById('parent-summary-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('parent-summary-modal');
+            if (modal && event.target === modal) {
+                closeParentSummary();
+            }
+        });
+        
+        // Load recent activity on page load
+        loadRecentActivity();
 
         // Begin Session button - navigate to session page
         document.getElementById('begin-session-btn').addEventListener('click', () => {
