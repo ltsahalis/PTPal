@@ -1984,6 +1984,40 @@ class GuidedSessionModal {
             tree_pose: 'Hold a steady tree pose for 30 seconds.'
         };
         
+        // Exercise to video file mapping (#TODO using single_leg.mp4 for all poses for now)
+        this.exerciseVideos = {
+            partial_squat: '/avatar_poses/single_leg.mp4',
+            heel_raises: '/avatar_poses/single_leg.mp4',
+            single_leg_stance: '/avatar_poses/single_leg.mp4',
+            tandem_stance: '/avatar_poses/single_leg.mp4',
+            functional_reach: '/avatar_poses/single_leg.mp4',
+            tree_pose: '/avatar_poses/single_leg.mp4'
+        };
+        
+        // Detailed pose descriptions for the popup
+        this.poseDescriptions = {
+            partial_squat: 'Stand with your feet shoulder-width apart. Slowly bend your knees and lower your body as if sitting back into a chair. Keep your back straight and go down about halfway, then return to standing position.',
+            heel_raises: 'Stand with your feet hip-width apart. Slowly rise up onto your toes, lifting your heels off the ground. Hold briefly, then lower your heels back down with control.',
+            single_leg_stance: 'Stand on one leg while keeping your balance. You can hold your arms out to the sides for balance. Keep your standing leg slightly bent and your core engaged.',
+            tandem_stance: 'Stand with one foot directly in front of the other, heel to toe. Keep your arms out to the sides for balance and maintain this position.',
+            functional_reach: 'Stand with your feet shoulder-width apart. Reach forward with one arm while keeping your balance. Move slowly and with control.',
+            tree_pose: 'Stand on one leg and place the sole of your other foot on your inner thigh or calf (avoid the knee). Bring your hands together at your chest or raise them overhead.'
+        };
+        
+        // Initialize pose demo popup elements
+        this.poseDemoPopup = document.getElementById('pose-demo-popup');
+        this.poseDemoVideo = document.getElementById('pose-demo-video');
+        this.poseDemoTitle = document.getElementById('pose-demo-title');
+        this.poseDemoText = document.getElementById('pose-demo-text');
+        this.poseDemoNextBtn = document.getElementById('pose-demo-next-btn');
+        this.avatarOverlay = document.getElementById('avatar-overlay');
+        this.avatarOverlayVideo = document.getElementById('avatar-overlay-video');
+        
+        // Set up pose demo next button handler
+        if (this.poseDemoNextBtn) {
+            this.poseDemoNextBtn.addEventListener('click', () => this.hidePoseDemoAndContinue());
+        }
+        
         if (this.exerciseSelect) {
             this.exerciseSelect.addEventListener('change', (event) => {
                 this.currentExercise = event.target.value;
@@ -2070,29 +2104,11 @@ class GuidedSessionModal {
             // Small delay to ensure camera feed is visible
             await new Promise(resolve => setTimeout(resolve, 300));
             
-            // Show countdown on top of camera view
-            await this.showCountdown();
+            // Show pose demonstration popup first
+            await this.showPoseDemo();
             
-            // Now start the actual session
-            if (this.feedbackSystem) {
-                if (typeof this.feedbackSystem.setPoseType === 'function') {
-                    this.feedbackSystem.setPoseType(this.currentExercise);
-                }
-                this.feedbackSystem.startRealTimeFeedback();
-            }
-            
-            this.remainingSeconds = this.exerciseDuration;
-            this.updateInstructionCopy();
-            this.updateTimerDisplay();
-            this.toggleLivePanel(true);
-            this.state = 'running';
-            this.showFloatingPanel(false);
-            this.setActions({
-                primaryText: 'Pause',
-                secondaryText: 'Stop Session'
-            });
-            this.setTitle('Session in progress', this.getInstructionForExercise(this.currentExercise));
-            this.startTimer();
+            // Wait for user to click "Next" (handled in hidePoseDemoAndContinue)
+            // The countdown and exercise start will be handled from hidePoseDemoAndContinue
         } catch (error) {
             console.error('Unable to start exercise session:', error);
             this.setError('We could not access the camera. Please allow permissions and try again.');
@@ -2107,6 +2123,99 @@ class GuidedSessionModal {
                 this.primaryBtn.disabled = false;
             }
         }
+    }
+    
+    async showPoseDemo() {
+        return new Promise((resolve) => {
+            if (!this.poseDemoPopup || !this.poseDemoVideo || !this.poseDemoTitle || !this.poseDemoText) {
+                console.log('Pose demo elements not found');
+                resolve();
+                return;
+            }
+            
+            // Get video path for current exercise
+            const videoPath = this.exerciseVideos[this.currentExercise] || this.exerciseVideos.single_leg_stance;
+            
+            // Set up the popup content
+            this.poseDemoTitle.textContent = this.formatExerciseName(this.currentExercise);
+            this.poseDemoText.textContent = this.poseDescriptions[this.currentExercise] || this.getInstructionForExercise(this.currentExercise);
+            
+            // Set video source
+            this.poseDemoVideo.src = videoPath;
+            this.poseDemoVideo.load();
+            
+            // Ensure video plays when loaded
+            this.poseDemoVideo.addEventListener('loadeddata', () => {
+                this.poseDemoVideo.play().catch(err => console.log('Video autoplay prevented:', err));
+            }, { once: true });
+            
+            // Show popup
+            this.poseDemoPopup.classList.remove('hidden');
+            
+            // Store resolve function to be called when user clicks Next
+            this.poseDemoResolve = resolve;
+        });
+    }
+    
+    async hidePoseDemoAndContinue() {
+        if (!this.poseDemoPopup) return;
+        
+        // Hide popup
+        this.poseDemoPopup.classList.add('hidden');
+        
+        // Small delay for smooth transition
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Set up overlay video for during exercise
+        const videoPath = this.exerciseVideos[this.currentExercise] || this.exerciseVideos.single_leg_stance;
+        if (this.avatarOverlayVideo) {
+            this.avatarOverlayVideo.src = videoPath;
+            this.avatarOverlayVideo.load();
+            // Ensure video plays when loaded
+            this.avatarOverlayVideo.addEventListener('loadeddata', () => {
+                this.avatarOverlayVideo.play().catch(err => console.log('Overlay video autoplay prevented:', err));
+            }, { once: true });
+        }
+        
+        // Show countdown on top of camera view
+        await this.showCountdown();
+        
+        // Show overlay video during exercise (after countdown)
+        if (this.avatarOverlay) {
+            this.avatarOverlay.classList.remove('hidden');
+        }
+        
+        // Continue with exercise start
+        this.continueExerciseAfterDemo();
+        
+        // Resolve the promise from showPoseDemo
+        if (this.poseDemoResolve) {
+            this.poseDemoResolve();
+            this.poseDemoResolve = null;
+        }
+    }
+    
+    continueExerciseAfterDemo() {
+        // Now start the actual session
+        if (this.feedbackSystem) {
+            if (typeof this.feedbackSystem.setPoseType === 'function') {
+                this.feedbackSystem.setPoseType(this.currentExercise);
+            }
+            this.feedbackSystem.startRealTimeFeedback();
+        }
+        
+        this.remainingSeconds = this.exerciseDuration;
+        this.updateInstructionCopy();
+        this.updateTimerDisplay();
+        this.toggleLivePanel(true);
+        this.state = 'running';
+        this.showFloatingPanel(false);
+        this.setActions({
+            primaryText: 'Pause',
+            secondaryText: 'Stop Session'
+        });
+        this.setTitle('Session in progress', this.getInstructionForExercise(this.currentExercise));
+        this.startTimer();
     }
     
     async showCountdown() {
@@ -2172,6 +2281,10 @@ class GuidedSessionModal {
             }
             this.feedbackSystem.stopRealTimeFeedback(true);
         }
+        // Hide overlay video when paused
+        if (this.avatarOverlay) {
+            this.avatarOverlay.classList.add('hidden');
+        }
         this.hideFloatingPanel();
         this.showOverlay();
         this.setTitle('Session paused', 'Take a breather. Resume when you are ready.');
@@ -2189,6 +2302,10 @@ class GuidedSessionModal {
                 this.feedbackSystem.setPoseType(this.currentExercise);
             }
             this.feedbackSystem.startRealTimeFeedback();
+        }
+        // Show overlay video again when resuming
+        if (this.avatarOverlay) {
+            this.avatarOverlay.classList.remove('hidden');
         }
         this.hideOverlay();
         this.showFloatingPanel(false);
@@ -2212,6 +2329,10 @@ class GuidedSessionModal {
             }
             this.feedbackSystem.stopRealTimeFeedback();
         }
+        // Hide overlay video when stopped
+        if (this.avatarOverlay) {
+            this.avatarOverlay.classList.add('hidden');
+        }
         this.toggleLivePanel(false);
         this.hideFloatingPanel();
         this.showExerciseSetup();
@@ -2228,6 +2349,10 @@ class GuidedSessionModal {
                 this.feedbackSystem.ttsService.forceStop();
             }
             this.feedbackSystem.stopRealTimeFeedback(true);
+        }
+        // Hide overlay video when exercise completes
+        if (this.avatarOverlay) {
+            this.avatarOverlay.classList.add('hidden');
         }
         this.toggleConfig(true);
         this.toggleLivePanel(true);

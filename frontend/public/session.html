@@ -104,6 +104,11 @@
                     <video id="webcam" autoplay playsinline></video>
                     <canvas id="output-canvas"></canvas>
 
+                    <!-- Avatar Overlay Video -->
+                    <div id="avatar-overlay" class="avatar-overlay hidden">
+                        <video id="avatar-overlay-video" autoplay loop muted playsinline></video>
+                    </div>
+
                     <!-- Countdown Overlay -->
                     <div id="countdown-overlay" class="countdown-overlay hidden">
                         <div class="countdown-content">
@@ -239,6 +244,27 @@
                 <a id="session-home-action" class="btn ghost" href="/account.html">Return Home</a>
                 <button id="session-secondary-action" class="btn secondary ghost">Cancel</button>
                 <button id="session-primary-action" class="btn primary">Continue</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Pose Demonstration Popup -->
+    <div id="pose-demo-popup" class="pose-demo-popup hidden">
+        <div class="pose-demo-backdrop"></div>
+        <div class="pose-demo-content">
+            <div class="pose-demo-header">
+                <h2 id="pose-demo-title">Single Leg Stance</h2>
+            </div>
+            <div class="pose-demo-body">
+                <div class="pose-demo-video-container">
+                    <video id="pose-demo-video" autoplay loop muted playsinline></video>
+                </div>
+                <div class="pose-demo-description">
+                    <p id="pose-demo-text">Hold a single-leg stance for 30 seconds. Stand on one leg while keeping your balance.</p>
+                </div>
+            </div>
+            <div class="pose-demo-footer">
+                <button id="pose-demo-next-btn" class="btn primary">Next</button>
             </div>
         </div>
     </div>

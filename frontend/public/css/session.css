@@ -2164,3 +2164,163 @@ footer {
     transform: scale(1.2);
     border-color: white;
 }
+
+/* Pose Demonstration Popup */
+.pose-demo-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.pose-demo-popup:not(.hidden) {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.pose-demo-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(5px);
+}
+
+.pose-demo-content {
+    position: relative;
+    background: white;
+    border-radius: 24px;
+    padding: 30px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+    z-index: 10002;
+    display: flex;
+    flex-direction: column;
+}
+
+.pose-demo-popup:not(.hidden) .pose-demo-content {
+    transform: scale(1);
+}
+
+.pose-demo-header {
+    margin-bottom: 20px;
+}
+
+.pose-demo-header h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--color-ink);
+    margin: 0;
+    text-align: center;
+}
+
+.pose-demo-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.pose-demo-video-container {
+    width: 100%;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 16 / 9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pose-demo-video-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.pose-demo-description {
+    text-align: center;
+}
+
+.pose-demo-description p {
+    font-size: 1.1rem;
+    color: var(--color-muted);
+    line-height: 1.6;
+    margin: 0;
+}
+
+.pose-demo-footer {
+    display: flex;
+    justify-content: center;
+    padding-top: 10px;
+}
+
+.pose-demo-footer .btn {
+    min-width: 160px;
+    padding: 14px 28px;
+    font-size: 1.1rem;
+}
+
+/* Avatar Overlay Video (during exercise) */
+.avatar-overlay {
+    position: absolute;
+    bottom: 24px;
+    right: 24px;
+    width: 200px;
+    max-width: 30%;
+    aspect-ratio: 16 / 9;
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10;
+    backdrop-filter: blur(4px);
+}
+
+.avatar-overlay.hidden {
+    display: none;
+}
+
+.avatar-overlay video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Responsive adjustments for avatar overlay */
+@media (max-width: 768px) {
+    .avatar-overlay {
+        width: 150px;
+        bottom: 16px;
+        right: 16px;
+    }
+    
+    .pose-demo-content {
+        padding: 24px;
+        max-width: 95%;
+    }
+    
+    .pose-demo-header h2 {
+        font-size: 1.5rem;
+    }
+    
+    .pose-demo-description p {
+        font-size: 1rem;
+    }
+}
