@@ -731,6 +731,40 @@ body.session-blocked #session-floating-panel {
     border-color: #4A90E2;
 }
 
+.video-upload-container {
+    margin-bottom: 20px;
+}
+
+.video-upload-container label {
+    display: block;
+    font-weight: 600;
+    color: #4A5568;
+    margin-bottom: 8px;
+}
+
+.video-upload-container input[type="file"] {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid #E2E8F0;
+    border-radius: 10px;
+    font-size: 1rem;
+    color: #2D3748;
+    background: #FDFDFD;
+    transition: border-color 0.3s ease;
+    cursor: pointer;
+}
+
+.video-upload-container input[type="file"]:focus {
+    outline: none;
+    border-color: #4A90E2;
+}
+
+.video-upload-container p {
+    margin-top: 8px;
+    font-size: 0.875rem;
+    color: #718096;
+}
+
 .session-live-panel {
     background: linear-gradient(120deg, rgba(72, 187, 120, 0.08), rgba(74, 144, 226, 0.08));
     border-radius: 18px;

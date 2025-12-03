@@ -1699,10 +1699,18 @@ body {
     border: 1px solid var(--border-color);
 }
 
+.session-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
 .btn-session {
     font-size: 1.5rem;
     padding: 1.5rem 3rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0;
 }
 
 .session-note {

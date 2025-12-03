@@ -92,10 +92,15 @@
 
             <!-- Begin Session Button -->
             <div class="session-section">
-                <button class="btn btn-primary btn-large btn-session" id="begin-session-btn">
-                    Begin Session
-                </button>
-                <p class="session-note">Click to start a new physical therapy session</p>
+                <div class="session-buttons">
+                    <button class="btn btn-primary btn-large btn-session" id="begin-session-btn">
+                        Begin Session
+                    </button>
+                    <button class="btn btn-secondary btn-large btn-session" id="upload-video-btn">
+                        Upload Video
+                    </button>
+                </div>
+                <p class="session-note">Click to start a new physical therapy session or upload a video for demo</p>
             </div>
         </div>
     </section>
@@ -485,6 +490,11 @@
         // Begin Session button - navigate to session page
         document.getElementById('begin-session-btn').addEventListener('click', () => {
             window.location.href = '/session';
+        });
+
+        // Upload Video button - navigate to session page with video mode
+        document.getElementById('upload-video-btn').addEventListener('click', () => {
+            window.location.href = '/session?mode=video';
         });
 
         // Logout function

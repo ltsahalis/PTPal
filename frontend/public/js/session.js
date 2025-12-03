@@ -1292,6 +1292,14 @@ class WebcamManager {
         this.camera = null;
         this.permissionGranted = false;
         
+        // Video mode support
+        this.isVideoMode = false;
+        this.videoFile = null;
+        this.videoAnimationFrame = null;
+        this.videoProcessingPending = false; // Track if we're waiting for pose results
+        this.lastPoseResultTime = 0; // Track when we last got pose results
+        this.videoFrameTimeout = null; // Timeout for video frame processing
+        
         // Timer for 10-second updates
         this.updateTimer = null;
         this.nextUpdateTime = null;
@@ -1331,6 +1339,165 @@ class WebcamManager {
     initializeEventListeners() {
         // Handle page unload to stop camera
         window.addEventListener('beforeunload', () => this.stopWebcam());
+    }
+    
+    setupVideoMode() {
+        // Add file input to session overlay
+        const sessionConfig = document.getElementById('session-exercise-config');
+        if (sessionConfig) {
+            const fileInputContainer = document.createElement('div');
+            fileInputContainer.className = 'video-upload-container';
+            fileInputContainer.innerHTML = `
+                <label for="video-file-input">Upload Video File</label>
+                <input type="file" id="video-file-input" accept="video/*" style="margin-top: 0.5rem; width: 100%; padding: 0.5rem;">
+                <p style="font-size: 0.875rem; color: #666; margin-top: 0.5rem;">Select a video file to analyze</p>
+            `;
+            sessionConfig.insertBefore(fileInputContainer, sessionConfig.firstChild);
+            
+            const fileInput = document.getElementById('video-file-input');
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    this.videoFile = file;
+                    this.loadVideoFile(file);
+                }
+            });
+        }
+    }
+    
+    loadVideoFile(file) {
+        const url = URL.createObjectURL(file);
+        this.video.src = url;
+        this.video.loop = true; // Loop video for demo mode
+        this.video.muted = true; // Mute audio for demo mode
+        this.video.onloadedmetadata = () => {
+            // Only create new session if one doesn't exist
+            let sessionId = localStorage.getItem('ptpal_session_id');
+            if (!sessionId) {
+                const newSessionId = this.createNewSession();
+                this.notifyNewSession(newSessionId);
+            }
+            
+            // Setup canvas first
+            this.setupCanvas();
+            
+            // Wait a bit for video to be fully ready, then play and start processing
+            setTimeout(() => {
+                this.video.play().then(() => {
+                    // Wait one more frame to ensure video is rendering
+                    requestAnimationFrame(() => {
+                        this.isStreaming = true;
+                        this.updateStatus('Video loaded - BlazePose running', 'success');
+                        this.feedbackSystem.setCameraStatus(true);
+                        this.startVideoProcessing();
+                        this.startUpdateTimer();
+                        console.log('[Video] Video loaded and processing started', {
+                            width: this.video.videoWidth,
+                            height: this.video.videoHeight,
+                            readyState: this.video.readyState
+                        });
+                    });
+                }).catch(err => {
+                    console.error('[Video] Error playing video:', err);
+                    this.updateStatus('Error playing video: ' + err.message, 'error');
+                });
+            }, 100); // Small delay to ensure video metadata is fully loaded
+        };
+        
+        // Handle video errors
+        this.video.onerror = (e) => {
+            console.error('[Video] Video error:', e);
+            this.updateStatus('Error loading video file', 'error');
+        };
+    }
+    
+    startVideoProcessing() {
+        // Stop any existing processing
+        if (this.videoAnimationFrame) {
+            cancelAnimationFrame(this.videoAnimationFrame);
+        }
+        if (this.videoFrameTimeout) {
+            clearTimeout(this.videoFrameTimeout);
+        }
+        
+        // Process video frames at a very slow rate to avoid memory issues
+        // We'll only send the next frame after receiving results from the previous one
+        const MIN_FRAME_INTERVAL = 100; // Minimum 100ms between frames (10 FPS max)
+        let lastFrameSentTime = 0;
+        let consecutiveErrors = 0;
+        
+        const sendNextFrame = () => {
+            if (!this.isStreaming || !this.pose || !this.video) {
+                return;
+            }
+            
+            // Don't send if we're still waiting for results from previous frame
+            if (this.videoProcessingPending) {
+                // Check if we've been waiting too long (timeout after 2 seconds)
+                const waitTime = Date.now() - this.lastPoseResultTime;
+                if (waitTime > 2000 && this.lastPoseResultTime > 0) {
+                    console.warn('[Video] Pose processing timeout, resetting');
+                    this.videoProcessingPending = false;
+                } else {
+                    // Try again in a bit
+                    this.videoFrameTimeout = setTimeout(sendNextFrame, 50);
+                    return;
+                }
+            }
+            
+            // Ensure enough time has passed since last frame
+            const timeSinceLastFrame = Date.now() - lastFrameSentTime;
+            if (timeSinceLastFrame < MIN_FRAME_INTERVAL) {
+                this.videoFrameTimeout = setTimeout(sendNextFrame, MIN_FRAME_INTERVAL - timeSinceLastFrame);
+                return;
+            }
+            
+            // Ensure video is ready and has valid dimensions
+            const isVideoReady = this.video.readyState >= 4 && // HAVE_ENOUGH_DATA
+                               this.video.videoWidth > 0 &&
+                               this.video.videoHeight > 0 &&
+                               !this.video.ended;
+            
+            if (isVideoReady) {
+                // Ensure video is playing
+                if (this.video.paused) {
+                    this.video.play().catch(err => {
+                        console.warn('[Video] Play failed:', err);
+                    });
+                }
+                
+                // Send frame for pose detection with error handling
+                try {
+                    this.videoProcessingPending = true;
+                    this.pose.send({ image: this.video });
+                    lastFrameSentTime = Date.now();
+                    consecutiveErrors = 0; // Reset error count on success
+                    
+                    // Schedule next frame after a delay
+                    this.videoFrameTimeout = setTimeout(sendNextFrame, MIN_FRAME_INTERVAL);
+                } catch (err) {
+                    console.error('[Video] Error in pose.send:', err);
+                    consecutiveErrors++;
+                    this.videoProcessingPending = false;
+                    
+                    // If we get errors, wait longer before retrying
+                    const retryDelay = Math.min(500, 100 * consecutiveErrors);
+                    this.videoFrameTimeout = setTimeout(sendNextFrame, retryDelay);
+                    
+                    if (consecutiveErrors >= 5) {
+                        console.error('[Video] Too many consecutive errors, stopping video processing');
+                        this.updateStatus('Video processing error - too many failures', 'error');
+                        this.isStreaming = false;
+                    }
+                }
+            } else {
+                // Video not ready, try again soon
+                this.videoFrameTimeout = setTimeout(sendNextFrame, 100);
+            }
+        };
+        
+        // Start processing after a short delay
+        this.videoFrameTimeout = setTimeout(sendNextFrame, 200);
     }
     
     async initializePose() {
@@ -1418,12 +1585,32 @@ waitForMediaPipe() {
         if (this.isStreaming) {
             return;
         }
+        if (this.isVideoMode) {
+            // In video mode, wait for user to select a video file
+            this.updateStatus('Please select a video file to begin', 'info');
+            return Promise.resolve();
+        }
         await this.startWebcam();
 }
 
     
     async startWebcam() {
         if (this.isStreaming) {
+            return Promise.resolve();
+        }
+        
+        // If in video mode and video file is already loaded, just start processing
+        if (this.isVideoMode && this.videoFile && this.video.src) {
+            // Ensure video is playing
+            if (this.video.paused || this.video.ended) {
+                this.video.currentTime = 0; // Reset to start
+                this.video.play().catch(err => {
+                    console.warn('Video play failed:', err);
+                });
+            }
+            this.isStreaming = true;
+            this.feedbackSystem.setCameraStatus(true);
+            this.startVideoProcessing();
             return Promise.resolve();
         }
         
@@ -1488,6 +1675,12 @@ waitForMediaPipe() {
     
     onPoseResults(results) {
         if (!this.isStreaming) return;
+        
+        // For video mode, mark that we've received results and can process next frame
+        if (this.isVideoMode) {
+            this.videoProcessingPending = false;
+            this.lastPoseResultTime = Date.now();
+        }
         
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -1707,13 +1900,39 @@ waitForMediaPipe() {
             this.camera = null;
         }
         
+        // Stop video animation frame if running
+        if (this.videoAnimationFrame) {
+            cancelAnimationFrame(this.videoAnimationFrame);
+            this.videoAnimationFrame = null;
+        }
+        
+        // Stop video frame timeout if running
+        if (this.videoFrameTimeout) {
+            clearTimeout(this.videoFrameTimeout);
+            this.videoFrameTimeout = null;
+        }
+        
+        // Reset video processing state
+        this.videoProcessingPending = false;
+        
         // Clear update timer
         if (this.updateTimer) {
             clearInterval(this.updateTimer);
             this.updateTimer = null;
         }
         
-        this.video.srcObject = null;
+        if (this.isVideoMode) {
+            // In video mode, pause video and clear src
+            if (this.video) {
+                this.video.pause();
+                if (this.video.src && this.video.src.startsWith('blob:')) {
+                    URL.revokeObjectURL(this.video.src);
+                }
+                this.video.src = '';
+            }
+        } else {
+            this.video.srcObject = null;
+        }
         this.isStreaming = false;
         
         // Disable feedback system
@@ -2329,7 +2548,11 @@ class GuidedSessionModal {
         this.hideFloatingPanel();
         this.showOverlay();
         this.setError('');
-        this.setTitle('Let’s set up your session', 'PTPal needs access to your camera so we can guide you safely.');
+        if (this.webcamManager.isVideoMode) {
+            this.setTitle('Let\'s set up your session', 'Select a video file to analyze your pose.');
+        } else {
+            this.setTitle('Let\'s set up your session', 'PTPal needs access to your camera so we can guide you safely.');
+        }
         this.toggleConfig(false);
         this.toggleLivePanel(false);
         this.setActions({
@@ -2344,7 +2567,11 @@ class GuidedSessionModal {
         this.hideFloatingPanel();
         this.showOverlay();
         this.setError('');
-        this.setTitle('Choose your exercise', 'Select what you’d like to practice, then start when ready.');
+        if (this.webcamManager.isVideoMode) {
+            this.setTitle('Choose your exercise', 'Select what you\'d like to analyze, then upload a video and start.');
+        } else {
+            this.setTitle('Choose your exercise', 'Select what you\'d like to practice, then start when ready.');
+        }
         this.toggleConfig(true);
         this.toggleLivePanel(false);
         this.updateInstructionCopy();
@@ -2369,16 +2596,28 @@ class GuidedSessionModal {
             console.log('[Session] Created new session ID for exercise:', newSessionId);
             await this.webcamManager.notifyNewSession(newSessionId);
             
-            // Start camera first
-            await this.webcamManager.requestCameraPermission();
-            await this.webcamManager.ensureCameraStarted();
+            // In video mode, check if video is loaded
+            if (this.webcamManager.isVideoMode) {
+                if (!this.webcamManager.videoFile || !this.webcamManager.isStreaming) {
+                    this.setError('Please select a video file first.');
+                    this.showOverlay();
+                    if (this.primaryBtn) {
+                        this.primaryBtn.disabled = false;
+                    }
+                    return;
+                }
+            } else {
+                // Start camera first (only for webcam mode)
+                await this.webcamManager.requestCameraPermission();
+                await this.webcamManager.ensureCameraStarted();
+            }
             
-            // Hide modal immediately so user can see camera
+            // Hide modal immediately so user can see video/camera
             this.hideOverlay();
             this.toggleConfig(false);
             this.toggleLivePanel(false);
             
-            // Small delay to ensure camera feed is visible
+            // Small delay to ensure video/camera feed is visible
             await new Promise(resolve => setTimeout(resolve, 300));
             
             // Show pose demonstration popup first
@@ -2388,7 +2627,11 @@ class GuidedSessionModal {
             // The countdown and exercise start will be handled from hidePoseDemoAndContinue
         } catch (error) {
             console.error('Unable to start exercise session:', error);
-            this.setError('We could not access the camera. Please allow permissions and try again.');
+            if (this.webcamManager.isVideoMode) {
+                this.setError('Could not load video. Please try again.');
+            } else {
+                this.setError('We could not access the camera. Please allow permissions and try again.');
+            }
             this.showOverlay(); // Show modal again on error
             this.setActions({
                 primaryText: 'Start Session',
@@ -3218,12 +3461,22 @@ document.addEventListener('DOMContentLoaded', () => {
         new TutorialSystem();
     }
 
+    // Check for video mode in URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const isVideoMode = urlParams.get('mode') === 'video';
+
     // Initialize immediately - waitForMediaPipe will handle script loading
     const webcamManager = new WebcamManager();
+    webcamManager.isVideoMode = isVideoMode;
     const guidedSession = new GuidedSessionModal(webcamManager);
     
-    // Check if browser supports required APIs
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    // If in video mode, add file input to session overlay
+    if (isVideoMode) {
+        webcamManager.setupVideoMode();
+    }
+    
+    // Check if browser supports required APIs (only for webcam mode)
+    if (!isVideoMode && (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)) {
         webcamManager.updateStatus('Your browser does not support camera access. Please use a modern browser.', 'error');
         if (guidedSession && typeof guidedSession.showUnsupportedState === 'function') {
             guidedSession.showUnsupportedState();
