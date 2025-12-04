@@ -519,12 +519,12 @@ body {
 .hero-image {
     display: flex;
     align-items: flex-end;
-    justify-content: flex-start;
-    padding-top: 2rem;
-    margin-top: 8rem;
-    margin-left: -8rem;
+    justify-content: center;
     position: relative;
     z-index: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 500px;
 }
 
 .hero-img {
@@ -533,14 +533,16 @@ body {
     height: auto;
     object-fit: contain;
     transition: transform 0.3s ease;
-    position: relative;
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 1;
     image-rendering: -webkit-optimize-contrast;
     image-rendering: crisp-edges;
     image-rendering: high-quality;
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
-    transform: translate3d(0, 0, 0);
     will-change: transform;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -549,7 +551,7 @@ body {
 }
 
 .hero-img:hover {
-    transform: scale(1.02);
+    transform: translateX(-50%) scale(1.02);
 }
 
 /* Features Section */
@@ -1202,10 +1204,24 @@ body {
         height: 300px;
     }
 
+    .hero-image {
+        min-height: 400px;
+        margin-top: 2rem;
+    }
+
     .hero-img {
+        position: relative;
+        bottom: auto;
+        left: auto;
+        transform: none;
         width: 100%;
-        height: 100%;
-        object-fit: cover;
+        max-width: 600px;
+        height: auto;
+        object-fit: contain;
+    }
+
+    .hero-img:hover {
+        transform: scale(1.02);
     }
 
     .nav-menu {

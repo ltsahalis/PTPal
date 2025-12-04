@@ -67,4 +67,24 @@ document.querySelectorAll('.btn-primary, .nav-cta').forEach(button => {
     });
 });
 
+// Hide navigation menu items when user is logged in (but only on non-public pages)
+document.addEventListener('DOMContentLoaded', () => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const navMenu = document.querySelector('.nav-menu');
+    
+    if (!navMenu) return;
+    
+    // Public pages where nav should always be visible
+    const publicPages = ['/', '/index.html', '/exercises', '/exercises.html', '/about', '/about.html', '/contact', '/contact.html', '/auth', '/auth.html'];
+    const currentPath = window.location.pathname;
+    
+    // If user is logged in AND not on a public page, hide the nav menu items
+    if (user.email && !publicPages.includes(currentPath)) {
+        navMenu.style.display = 'none';
+    } else {
+        // Make sure nav is visible on public pages
+        navMenu.style.display = '';
+    }
+});
+
 

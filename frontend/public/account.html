@@ -19,7 +19,7 @@
                     <span class="logo-text">PT Pal</span>
                 </a>
             </div>
-            <ul class="nav-menu">
+            <ul class="nav-menu" id="account-nav-menu">
                 <li><a href="/" class="nav-link">Home</a></li>
                 <li><a href="#" class="nav-link nav-link-disabled" onclick="return false;">Exercises</a></li>
                 <li><a href="#" class="nav-link nav-link-disabled" onclick="return false;">About</a></li>
@@ -101,6 +101,14 @@
     </section>
 
     <script>
+        // Hide navigation menu on account page (logged-in page)
+        document.addEventListener('DOMContentLoaded', () => {
+            const navMenu = document.getElementById('account-nav-menu');
+            if (navMenu) {
+                navMenu.style.display = 'none';
+            }
+        });
+
         // Load user data
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         
