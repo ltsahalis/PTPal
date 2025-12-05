@@ -36,7 +36,7 @@
     <section class="account-section">
         <div class="container">
             <div class="account-header">
-                <h1>Welcome back, <span id="user-name">User</span>! 👋</h1>
+                <h1>Hello, <span id="user-name">User</span>! 👋</h1>
                 <p>Track your progress and continue your physical therapy journey</p>
                 <div class="overall-progress-container">
                     <div class="progress-bar-wrapper">
@@ -112,8 +112,11 @@
         // Load user data
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         
-        if (user.name) {
-            document.getElementById('user-name').textContent = user.name;
+        // Display child's name if available, otherwise fall back to parent's name (for backward compatibility)
+        const displayName = user.childName || user.name;
+        
+        if (displayName) {
+            document.getElementById('user-name').textContent = displayName;
         } else {
             // If no user data, redirect to auth page
             window.location.href = '/auth.html';
@@ -129,7 +132,9 @@
                     ? `https://${window.location.hostname}:8001`
                     : '';
                 
-                const response = await fetch(`${apiBaseUrl}/api/recent-activity`);
+                // Include user email to filter activities by user
+                const userEmail = user.email ? encodeURIComponent(user.email.toLowerCase()) : '';
+                const response = await fetch(`${apiBaseUrl}/api/recent-activity${userEmail ? '?user_email=' + userEmail : ''}`);
                 const data = await response.json();
                 
                 let totalStars = 0;
@@ -228,7 +233,9 @@
                     ? `https://${window.location.hostname}:8001`
                     : '';
                 
-                const response = await fetch(`${apiBaseUrl}/api/recent-activity`);
+                // Include user email to filter activities by user
+                const userEmail = user.email ? encodeURIComponent(user.email.toLowerCase()) : '';
+                const response = await fetch(`${apiBaseUrl}/api/recent-activity${userEmail ? '?user_email=' + userEmail : ''}`);
                 const data = await response.json();
                 
                 if (data.status === 'success' && data.activities && data.activities.length > 0) {

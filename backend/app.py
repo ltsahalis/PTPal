@@ -1067,20 +1067,39 @@ def new_session_notification():
 def get_recent_activity():
     """Get recent activity/sessions for the home screen"""
     try:
+        # Get user email from query parameter
+        user_email = request.args.get('user_email', '').strip().lower()
+        
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
         # Get distinct sessions with their summaries, ordered by most recent
-        # First get the max id for each session to determine recency
-        cursor.execute('''
-            SELECT 
-                session_id,
-                MAX(id) as max_id
-            FROM feedback_results
-            GROUP BY session_id
-            ORDER BY max_id DESC
-            LIMIT 10
-        ''')
+        # Filter by user email if provided (session_id should contain user email)
+        if user_email:
+            # Filter sessions that contain the user's email in the session_id
+            # Session IDs are formatted as: session_timestamp_random_user@email.com
+            cursor.execute('''
+                SELECT 
+                    session_id,
+                    MAX(id) as max_id
+                FROM feedback_results
+                WHERE session_id LIKE ?
+                GROUP BY session_id
+                ORDER BY max_id DESC
+                LIMIT 10
+            ''', (f'%{user_email}%',))
+        else:
+            # If no user email provided, return empty (new users should not see other users' data)
+            cursor.execute('''
+                SELECT 
+                    session_id,
+                    MAX(id) as max_id
+                FROM feedback_results
+                WHERE 1=0
+                GROUP BY session_id
+                ORDER BY max_id DESC
+                LIMIT 10
+            ''')
         
         recent_sessions = cursor.fetchall()
         session_ids = [row[0] for row in recent_sessions] if recent_sessions else []

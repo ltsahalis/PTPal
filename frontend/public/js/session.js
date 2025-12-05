@@ -2179,7 +2179,10 @@ waitForMediaPipe() {
     getSessionId() {
         let sessionId = localStorage.getItem('ptpal_session_id');
         if (!sessionId) {
-            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            // Include user email in session ID for user identification
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const userEmail = user.email ? user.email.toLowerCase().replace(/[^a-z0-9@.]/g, '') : 'anonymous';
+            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + userEmail;
             localStorage.setItem('ptpal_session_id', sessionId);
         }
         return sessionId;
@@ -2187,7 +2190,10 @@ waitForMediaPipe() {
     
     createNewSession() {
         // Generate a new session ID when camera starts
-        const newSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        // Include user email in session ID for user identification
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const userEmail = user.email ? user.email.toLowerCase().replace(/[^a-z0-9@.]/g, '') : 'anonymous';
+        const newSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + userEmail;
         localStorage.setItem('ptpal_session_id', newSessionId);
         return newSessionId;
     }
