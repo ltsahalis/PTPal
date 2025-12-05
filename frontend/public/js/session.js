@@ -2263,11 +2263,11 @@ class GuidedSessionModal {
         
         // Exercise to video file mapping
         this.exerciseVideos = {
-            partial_squat: '/avatar_poses/leg_lift.mp4',
-            heel_raises: '/avatar_poses/leg_lift.mp4',
+            partial_squat: '/avatar_poses/squat.mp4',
+            heel_raises: '/avatar_poses/heel_raise.mp4',
             single_leg_stance: '/avatar_poses/leg_lift.mp4',
             tandem_stance: '/avatar_poses/tandem.mp4',
-            functional_reach: '/avatar_poses/leg_lift.mp4',
+            functional_reach: '/avatar_poses/reach.mp4',
             tree_pose: '/avatar_poses/tree.mp4'
         };
         
