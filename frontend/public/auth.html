@@ -38,23 +38,27 @@
             <div class="auth-card">
                 <div class="auth-header">
                     <h1>Welcome to PT Pal!</h1>
-                    <p>Join us and start your physical therapy journey</p>
+                    <p>Sign in as a parent or guardian to manage your child's physical therapy journey</p>
                 </div>
 
                 <div class="auth-tabs">
                     <button class="auth-tab active" data-tab="signup">Sign Up</button>
-                    <button class="auth-tab" data-tab="login">Log In</button>
+                    <button class="auth-tab" data-tab="login">Parent/Guardian Log In</button>
                 </div>
 
                 <!-- Sign Up Form -->
                 <form id="signup-form" class="auth-form active">
                     <div class="form-group">
-                        <label for="signup-name">Full Name</label>
-                        <input type="text" id="signup-name" name="name" required placeholder="Enter your full name">
+                        <label for="signup-parent-name">Parent/Guardian Full Name</label>
+                        <input type="text" id="signup-parent-name" name="name" required placeholder="Enter your full name">
                     </div>
                     <div class="form-group">
                         <label for="signup-email">Email</label>
-                        <input type="email" id="signup-email" name="email" required placeholder="Enter your email">
+                        <input type="email" id="signup-email" name="email" required placeholder="Enter parent/guardian's email">
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-name">Child's Name</label>
+                        <input type="text" id="signup-name" name="name" required placeholder="Enter child's name">
                     </div>
                     <div class="form-group">
                         <label for="signup-password">Password</label>
@@ -67,8 +71,8 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label for="signup-age">Age</label>
-                        <input type="number" id="signup-age" name="age" required placeholder="Enter your age" min="1" max="120">
+                        <label for="signup-age">Child's Age</label>
+                        <input type="number" id="signup-age" name="age" required placeholder="Enter child's age" min="1" max="120">
                     </div>
                     <button type="submit" class="btn btn-primary btn-large">Create Account</button>
                 </form>
@@ -76,9 +80,10 @@
                 <!-- Log In Form -->
                 <form id="login-form" class="auth-form">
                     <div class="error-message" id="login-error" style="display: none;"></div>
+                    <p style="margin-bottom: 1.5rem; color: var(--text-light); font-size: 0.95rem;">Sign in to access your parent/guardian account</p>
                     <div class="form-group">
-                        <label for="login-email">Email</label>
-                        <input type="email" id="login-email" name="email" required placeholder="Enter your email">
+                        <label for="login-email">Parent/Guardian Email</label>
+                        <input type="email" id="login-email" name="email" required placeholder="Enter your parent/guardian email">
                     </div>
                     <div class="form-group">
                         <label for="login-password">Password</label>
@@ -90,7 +95,7 @@
                             </button>
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-large">Log In</button>
+                    <button type="submit" class="btn btn-primary btn-large">Sign In as Parent/Guardian</button>
                 </form>
             </div>
         </div>
@@ -142,7 +147,8 @@
         document.getElementById('signup-form').addEventListener('submit', (e) => {
             e.preventDefault();
             const formData = {
-                name: document.getElementById('signup-name').value,
+                name: document.getElementById('signup-parent-name').value,
+                childName: document.getElementById('signup-name').value,
                 email: document.getElementById('signup-email').value,
                 password: document.getElementById('signup-password').value,
                 age: document.getElementById('signup-age').value
@@ -150,6 +156,10 @@
             
             // Store user data in localStorage (for demo purposes)
             localStorage.setItem('user', JSON.stringify(formData));
+            
+            // Clear any old session data so new users start fresh
+            localStorage.removeItem('ptpal_session_id');
+            localStorage.removeItem('progress');
             
             // Redirect to account page
             window.location.href = '/account.html';
@@ -188,6 +198,13 @@
             if (user.email && user.email.toLowerCase() === email.toLowerCase() && user.password === password) {
                 // Hide error message if it was showing
                 errorMessage.style.display = 'none';
+                
+                // If logging in as a different user, clear old session data
+                const currentSessionId = localStorage.getItem('ptpal_session_id');
+                if (currentSessionId && !currentSessionId.includes(email.toLowerCase())) {
+                    localStorage.removeItem('ptpal_session_id');
+                }
+                
                 // Redirect to account page
                 window.location.href = '/account.html';
             } else {
